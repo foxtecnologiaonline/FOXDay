@@ -10,6 +10,20 @@ Tarefas e metas por texto ou voz, priorização **Importante / Urgente / Circuns
 
 - [Escopo do produto](docs/escopo.md) — visão, módulos, fases de entrega, stack e decisões.
 
+## Como rodar
+
+Pré-requisitos: Node 20+, um projeto Supabase com a migração de `supabase/migrations/` aplicada.
+
+```bash
+cp .env.example .env   # preencher VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
+npm install
+npm run dev            # desenvolvimento (http://localhost:5173)
+npm test               # testes da lógica de domínio
+npm run build          # build de produção em dist/
+```
+
+No celular, acesse a URL publicada e use "Adicionar à tela inicial" — o app é um PWA instalável.
+
 ## Stack (aprovada)
 
 - **Frontend:** PWA mobile-first (React + Vite)

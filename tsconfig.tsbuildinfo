@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/lib/datas.ts","./src/lib/dominio.test.ts","./src/lib/dominio.ts","./src/lib/supabase.ts","./src/telas/Config.tsx","./src/telas/Entrar.tsx","./src/telas/Historico.tsx","./src/telas/Hoje.tsx","./src/telas/Relatorio.tsx"],"version":"5.9.3"}
