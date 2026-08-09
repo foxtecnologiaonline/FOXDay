@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Perfil } from '../App'
 import { supabase } from '../lib/supabase'
 import SkeletonTarefa from '../componentes/SkeletonTarefa'
+import ModalConfirmarVoz from '../componentes/ModalConfirmarVoz'
 import { useTarefasHoje } from '../hooks/useTarefasHoje'
 import { useAtrasadas } from '../hooks/useAtrasadas'
+import { useVozCaptura } from '../hooks/useVozCaptura'
 import {
   adicionarDias,
   formatarDataCurta,
@@ -28,16 +30,21 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const hoje = hojeISO()
   const { tarefas, carregando: carregandoTarefas, marcarConcluida, descartar } = useTarefasHoje()
   const { atrasadas, carregando: carregandoAtrasadas, reagendarParaHoje, descartar: descartarAtrasada } = useAtrasadas(hoje)
+  const { estado: vozEstado, iniciar: iniciarVoz, limpar: limparVoz } = useVozCaptura()
 
   const [mantidas, setMantidas] = useState<Set<string>>(new Set())
   const [observacoes, setObservacoes] = useState<Observacao[]>([])
   const [diaFechado, setDiaFechado] = useState(true)
 
   const [texto, setTexto] = useState('')
-  const [modo, setModo] = useState<'tarefa' | 'obs'>('tarefa')
+  const [modo, setModo] = useState<'tarefa' | 'obs' | 'voz'>('tarefa')
   const [diaAlvo, setDiaAlvo] = useState<'hoje' | 'amanha'>('hoje')
   const [salvando, setSalvando] = useState(false)
   const ultimaClassificacao = useRef<Classificacao>('importante')
+
+  const [mostrarModalVoz, setMostrarModalVoz] = useState(false)
+  const [tarefa, setTarefa] = useState('')
+  const [confianca, setConfianca] = useState(0)
 
   const carregando = carregandoTarefas || carregandoAtrasadas
 
@@ -192,6 +199,12 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
           <button className={modo === 'obs' ? 'chip ativo' : 'chip'} onClick={() => setModo('obs')}>
             ✎ Anotação
           </button>
+          <button
+            className={modo === 'voz' ? 'chip ativo' : 'chip'}
+            onClick={() => setModo('voz')}
+          >
+            🎤 Voz
+          </button>
           {modo === 'tarefa' && (
             <span className="captura-dia">
               <button
@@ -209,38 +222,143 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
             </span>
           )}
         </div>
-        <input
-          className="captura-campo"
-          placeholder={modo === 'tarefa' ? 'O que precisa ser feito?' : 'Anote uma observação…'}
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') salvar()
+        {modo !== 'voz' && (
+          <>
+            <input
+              className="captura-campo"
+              placeholder={modo === 'tarefa' ? 'O que precisa ser feito?' : 'Anote uma observação…'}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') salvar()
+              }}
+            />
+            <div className="captura-acoes">
+              {modo === 'tarefa' ? (
+                CLASSIFICACOES.map((c) => (
+                  <button
+                    key={c}
+                    className={`botao-classificacao ${c}`}
+                    disabled={!texto.trim() || salvando}
+                    onClick={() => salvar(c)}
+                  >
+                    {ROTULO_CLASSIFICACAO[c]}
+                  </button>
+                ))
+              ) : (
+                <button
+                  className="botao-primario"
+                  disabled={!texto.trim() || salvando}
+                  onClick={() => salvar()}
+                >
+                  Registrar
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {modo === 'voz' && (
+          <div className="captura-voz">
+            <div className="voz-status">
+              {vozEstado.escutando && (
+                <div className="voz-escutando">
+                  <div className="voz-animacao">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <p>Escutando…</p>
+                </div>
+              )}
+              {vozEstado.processando && (
+                <div className="voz-processando">
+                  <p>Processando…</p>
+                </div>
+              )}
+              {vozEstado.erro && (
+                <div className="voz-erro">
+                  <p>⚠️ {vozEstado.erro}</p>
+                </div>
+              )}
+              {vozEstado.transcricao && !vozEstado.escutando && !vozEstado.processando && (
+                <div className="voz-resultado">
+                  <p>📝 {vozEstado.transcricao}</p>
+                </div>
+              )}
+            </div>
+            <div className="captura-acoes">
+              {!vozEstado.escutando && !vozEstado.processando && !vozEstado.transcricao && (
+                <button
+                  className="botao-primario"
+                  onClick={() => iniciarVoz()}
+                  disabled={!navigator.mediaDevices}
+                >
+                  🎤 Começar a falar
+                </button>
+              )}
+              {vozEstado.escutando && (
+                <button
+                  className="botao-secundario"
+                  onClick={() => {
+                    // Stop button would go here
+                  }}
+                >
+                  Parar
+                </button>
+              )}
+              {vozEstado.transcricao && !vozEstado.escutando && !vozEstado.processando && (
+                <>
+                  <button
+                    className="botao-secundario"
+                    onClick={() => limparVoz()}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="botao-primario"
+                    onClick={() => {
+                      setMostrarModalVoz(true)
+                      setTarefa(vozEstado.transcricao)
+                      setConfianca(80)
+                    }}
+                  >
+                    Confirmar
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {mostrarModalVoz && (
+        <ModalConfirmarVoz
+          tarefa={tarefa}
+          classificacao={ultimaClassificacao.current}
+          data={diaAlvo}
+          confianca={confianca}
+          processando={salvando}
+          onConfirmar={async () => {
+            setSalvando(true)
+            try {
+              await supabase.from('tarefa').insert({
+                titulo: tarefa,
+                data: diaAlvo === 'hoje' ? hoje : adicionarDias(hoje, 1),
+                classificacao: ultimaClassificacao.current,
+              })
+              limparVoz()
+              setMostrarModalVoz(false)
+              setModo('tarefa')
+            } finally {
+              setSalvando(false)
+            }
+          }}
+          onCancelar={() => {
+            setMostrarModalVoz(false)
+            limparVoz()
           }}
         />
-        <div className="captura-acoes">
-          {modo === 'tarefa' ? (
-            CLASSIFICACOES.map((c) => (
-              <button
-                key={c}
-                className={`botao-classificacao ${c}`}
-                disabled={!texto.trim() || salvando}
-                onClick={() => salvar(c)}
-              >
-                {ROTULO_CLASSIFICACAO[c]}
-              </button>
-            ))
-          ) : (
-            <button
-              className="botao-primario"
-              disabled={!texto.trim() || salvando}
-              onClick={() => salvar()}
-            >
-              Registrar
-            </button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   )
 }

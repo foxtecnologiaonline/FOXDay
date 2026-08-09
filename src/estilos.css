@@ -652,3 +652,286 @@ ul {
   border-radius: 4px;
   width: 60%;
 }
+
+/* ── Modal Confirmação ──────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-conteudo {
+  background: var(--cartao);
+  border-radius: var(--raio) var(--raio) 0 0;
+  width: 100%;
+  max-width: var(--largura-max);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--borda);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.modal-fechar {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--texto-suave);
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-fechar:active {
+  opacity: 0.6;
+}
+
+.modal-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.modal-icone {
+  font-size: 1.5rem;
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-item > div {
+  flex: 1;
+}
+
+.modal-label {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.modal-valor {
+  margin: 4px 0 0 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--texto);
+}
+
+.modal-aviso {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 4px;
+}
+
+.modal-aviso p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: #856404;
+}
+
+.modal-acoes {
+  display: flex;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--borda);
+  background: var(--fundo);
+}
+
+.botao-secundario {
+  flex: 1;
+  padding: 12px 16px;
+  background: var(--borda);
+  color: var(--texto);
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: background 0.2s ease;
+  cursor: pointer;
+}
+
+.botao-secundario:active:not(:disabled) {
+  opacity: 0.8;
+}
+
+.botao-secundario:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Captura por Voz ────────────────────────────── */
+.captura-voz {
+  padding: 16px 0;
+}
+
+.voz-status {
+  background: var(--laranja-suave);
+  border-radius: var(--raio);
+  padding: 20px 16px;
+  margin-bottom: 16px;
+  text-align: center;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voz-escutando {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.voz-escutando p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.voz-animacao {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 24px;
+}
+
+.voz-animacao span {
+  width: 4px;
+  height: 20px;
+  background: var(--laranja);
+  border-radius: 2px;
+  animation: pulse 0.6s ease-in-out infinite;
+}
+
+.voz-animacao span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.voz-animacao span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.voz-animacao span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    height: 10px;
+    opacity: 0.5;
+  }
+  50% {
+    height: 24px;
+    opacity: 1;
+  }
+}
+
+.voz-processando {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.voz-processando p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--texto);
+  font-weight: 600;
+}
+
+.voz-processando::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--borda);
+  border-top-color: var(--laranja);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.voz-erro {
+  background: #ffebee;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.voz-erro p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #c62828;
+}
+
+.voz-resultado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voz-resultado p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--texto);
+  font-weight: 500;
+  flex: 1;
+}
