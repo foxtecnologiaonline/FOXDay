@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Perfil } from '../App'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseCall } from '../lib/supabase'
+import { logErro } from '../lib/log'
+import SkeletonTarefa from '../componentes/SkeletonTarefa'
 import {
   adicionarDias,
   formatarDataCurta,
@@ -86,14 +88,41 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
 
   async function alternarConclusao(t: Tarefa) {
     const concluir = t.status !== 'concluida'
-    await supabase
-      .from('tarefa')
-      .update({
-        status: concluir ? 'concluida' : 'pendente',
-        concluida_em: concluir ? new Date().toISOString() : null,
-      })
-      .eq('id', t.id)
-    await carregar()
+    const statusAnterior = t.status
+
+    // 1. Optimistic update: atualizar localmente imediatamente
+    setTarefas((prev) =>
+      prev.map((tarefa) =>
+        tarefa.id === t.id
+          ? {
+              ...tarefa,
+              status: concluir ? 'concluida' : 'pendente',
+              concluida_em: concluir ? new Date().toISOString() : null,
+            }
+          : tarefa
+      )
+    )
+
+    // 2. Async: confirmar no servidor
+    const { erro } = await supabaseCall(async () => {
+      return supabase
+        .from('tarefa')
+        .update({
+          status: concluir ? 'concluida' : 'pendente',
+          concluida_em: concluir ? new Date().toISOString() : null,
+        })
+        .eq('id', t.id)
+    })
+
+    // 3. Se erro: reverter
+    if (erro) {
+      setTarefas((prev) =>
+        prev.map((tarefa) =>
+          tarefa.id === t.id ? { ...tarefa, status: statusAnterior, concluida_em: t.concluida_em } : tarefa
+        )
+      )
+      logErro('Erro ao marcar tarefa', erro)
+    }
   }
 
   async function descartar(t: Tarefa) {
@@ -154,7 +183,11 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
 
       <section className="lista-dia">
         {carregando ? (
-          <p className="texto-suave">Carregando…</p>
+          <ul>
+            <SkeletonTarefa />
+            <SkeletonTarefa />
+            <SkeletonTarefa />
+          </ul>
         ) : listaDia.length === 0 ? (
           <div className="vazio">
             <p>Nenhuma tarefa para hoje.</p>
