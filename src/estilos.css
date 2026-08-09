@@ -1125,3 +1125,57 @@ ul {
   border-color: var(--laranja);
   color: white;
 }
+
+/* ── Status de Conexão ──────────────────────────── */
+.status-conexao {
+  position: sticky;
+  top: 0;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 100;
+  transition: all 0.3s ease;
+}
+
+.status-conexao .badge-pendentes {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.status-online {
+  background: rgba(76, 175, 80, 0.1);
+  color: #2e7d32;
+}
+
+.status-offline {
+  background: rgba(158, 158, 158, 0.1);
+  color: #616161;
+}
+
+.status-sincronizando {
+  background: rgba(255, 193, 7, 0.1);
+  color: #f57f17;
+  animation: pulse-sync 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-sync {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.status-erro-sync {
+  background: rgba(244, 67, 54, 0.1);
+  color: #c62828;
+}
