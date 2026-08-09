@@ -935,3 +935,55 @@ ul {
   font-weight: 500;
   flex: 1;
 }
+
+/* ── Modal Form Fields ──────────────────────────── */
+.modal-campo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--borda);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--fundo);
+  color: var(--texto);
+  transition: border-color 0.2s ease;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--laranja);
+  box-shadow: 0 0 0 3px rgba(232, 89, 12, 0.1);
+}
+
+.modal-classificacoes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modal-classificacoes .botao-classificacao {
+  flex: 1;
+  min-width: 100px;
+  padding: 10px 12px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-classificacoes .botao-classificacao:active {
+  opacity: 0.8;
+}
+
+.modal-classificacoes .botao-classificacao.ativo {
+  border-color: currentColor;
+  transform: scale(1.05);
+}

@@ -355,13 +355,13 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
           data={dataInterpretada}
           confianca={confianca}
           processando={salvando}
-          onConfirmar={async () => {
+          onConfirmar={async (t, c, d) => {
             setSalvando(true)
             try {
               await supabase.from('tarefa').insert({
-                titulo: tarefa,
-                data: dataInterpretada === 'hoje' ? hoje : adicionarDias(hoje, 1),
-                classificacao: classificacaoInterpretada,
+                titulo: t,
+                data: d === 'hoje' ? hoje : adicionarDias(hoje, 1),
+                classificacao: c,
               })
               limparVoz()
               setMostrarModalVoz(false)
