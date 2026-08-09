@@ -196,6 +196,79 @@ ul {
   background: var(--circunstancial);
 }
 
+.indicador-delegacao,
+.indicador-rotina {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--fundo);
+  color: var(--texto-suave);
+  flex-shrink: 0;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.indicador-delegacao {
+  background: rgba(255, 140, 0, 0.1);
+  border: 1px solid rgba(255, 140, 0, 0.3);
+}
+
+.indicador-rotina {
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.indicador-delegacao .prazo {
+  font-size: 0.75rem;
+  margin-left: 2px;
+}
+
+.menu-status-delegacao {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.status-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  background: var(--fundo);
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.status-button:hover:not(:disabled) {
+  background: var(--laranja-suave);
+  border-color: var(--laranja);
+}
+
+.status-button.ativo {
+  background: var(--laranja);
+  border-color: var(--laranja);
+  color: #fff;
+}
+
+.status-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.filtros-hoje {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
 /* ── Triagem de pendências ──────────────────────────────── */
 .triagem {
   border-left: 4px solid var(--laranja);

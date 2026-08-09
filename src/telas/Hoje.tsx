@@ -4,6 +4,9 @@ import { supabase } from '../lib/supabase'
 import SkeletonTarefa from '../componentes/SkeletonTarefa'
 import ModalConfirmarVoz from '../componentes/ModalConfirmarVoz'
 import ModalOpcoesTarefa from '../componentes/ModalOpcoesTarefa'
+import MenuStatusDelegacao from '../componentes/MenuStatusDelegacao'
+import FiltrosHoje from '../componentes/FiltrosHoje'
+import type { StatusDelegacao } from '../lib/dominio'
 import { useTarefasHoje } from '../hooks/useTarefasHoje'
 import { useAtrasadas } from '../hooks/useAtrasadas'
 import { useVozCaptura } from '../hooks/useVozCaptura'
@@ -58,9 +61,44 @@ function gerarInstanciasRotina(
   return instancias
 }
 
+function diasRotinaPorExtenso(dias: number[]): string {
+  const nomes = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']
+  return dias.map(d => nomes[d]).join('-')
+}
+
+function renderarIndicadores(t: any) {
+  return (
+    <>
+      {t.delegada_para && (
+        <span className="indicador-delegacao" title={`Delegada para ${t.delegada_para}`}>
+          👤 {t.delegada_para}
+          {t.prazo_delegacao && <span className="prazo"> ({formatarDataCurta(t.prazo_delegacao)})</span>}
+        </span>
+      )}
+      {t.eh_rotina && t.dias_rotina && (
+        <span className="indicador-rotina" title="Tarefa rotineira">
+          🔄 {diasRotinaPorExtenso(t.dias_rotina)}
+        </span>
+      )}
+    </>
+  )
+}
+
+async function mudarStatusDelegacao(tarefaId: string, novoStatus: StatusDelegacao) {
+  const { error } = await supabase
+    .from('tarefa')
+    .update({ status_delegacao: novoStatus })
+    .eq('id', tarefaId)
+
+  if (error) {
+    console.error('Erro ao atualizar status de delegação:', error)
+    throw error
+  }
+}
+
 export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const hoje = hojeISO()
-  const { tarefas, carregando: carregandoTarefas, marcarConcluida, descartar } = useTarefasHoje()
+  const { tarefas, carregando: carregandoTarefas, marcarConcluida, descartar, carregar } = useTarefasHoje()
   const { atrasadas, carregando: carregandoAtrasadas, reagendarParaHoje, descartar: descartarAtrasada } = useAtrasadas(hoje)
   const { estado: vozEstado, iniciar: iniciarVoz, limpar: limparVoz } = useVozCaptura()
   const { interpretar } = useInterpretarVoz()
@@ -90,6 +128,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
     delegadaPara: null as string | null,
     prazoDelegacao: null as string | null,
   })
+  const [filtros, setFiltros] = useState({ delegadas: false, rotinas: false })
 
   const carregando = carregandoTarefas || carregandoAtrasadas
 
@@ -170,7 +209,13 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
   }
 
   const listaTriagem = atrasadas.filter((t) => !mantidas.has(t.id))
-  const listaDia = ordenarTarefas(tarefas)
+  let listaDia = ordenarTarefas(tarefas)
+  if (filtros.delegadas) {
+    listaDia = listaDia.filter((t) => t.delegada_para)
+  }
+  if (filtros.rotinas) {
+    listaDia = listaDia.filter((t) => t.eh_rotina)
+  }
   const primeiroNome = perfil?.nome.split(' ')[0]
   const mostrarFechamento = Boolean(
     perfil && !diaFechado && tarefas.length > 0 && passouDoHorario(perfil.horario_relatorio)
@@ -216,6 +261,14 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
       )}
 
       <section className="lista-dia">
+        {(filtros.delegadas || filtros.rotinas) && (
+          <FiltrosHoje
+            filtrosAtivos={filtros}
+            onMudarFiltro={(tipo, ativo) => {
+              setFiltros((prev) => ({ ...prev, [tipo]: ativo }))
+            }}
+          />
+        )}
         {carregando ? (
           <ul>
             <SkeletonTarefa />
@@ -224,9 +277,9 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
           </ul>
         ) : listaDia.length === 0 ? (
           <div className="vazio">
-            <p>Nenhuma tarefa para hoje.</p>
+            <p>{filtros.delegadas || filtros.rotinas ? 'Nenhuma tarefa com esses filtros.' : 'Nenhuma tarefa para hoje.'}</p>
             <p className="texto-suave">
-              Digite abaixo o que precisa ser feito e escolha a importância — só isso.
+              {!filtros.delegadas && !filtros.rotinas && 'Digite abaixo o que precisa ser feito e escolha a importância — só isso.'}
             </p>
           </div>
         ) : (
@@ -247,6 +300,20 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                 <span className={`selo ${t.classificacao}`} title={ROTULO_CLASSIFICACAO[t.classificacao]}>
                   {ROTULO_CLASSIFICACAO[t.classificacao][0]}
                 </span>
+                {renderarIndicadores(t)}
+                {t.delegada_para && (
+                  <MenuStatusDelegacao
+                    tarefa={t}
+                    onMudarStatus={async (novoStatus) => {
+                      try {
+                        await mudarStatusDelegacao(t.id, novoStatus)
+                        await carregar()
+                      } catch (erro) {
+                        console.error('Erro ao mudar status:', erro)
+                      }
+                    }}
+                  />
+                )}
                 {t.status === 'pendente' && (
                   <button
                     className="botao-descartar"
