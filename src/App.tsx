@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigurado } from './lib/supabase'
+import ErrorBoundary from './ComponenteErro'
 import Entrar from './telas/Entrar'
 import Hoje from './telas/Hoje'
 import Relatorio from './telas/Relatorio'
@@ -80,29 +81,31 @@ export default function App() {
   if (!sessao) return <Entrar />
 
   return (
-    <div className="app">
-      <main className="conteudo">
-        {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
-        {aba === 'relatorio' && <Relatorio />}
-        {aba === 'historico' && <Historico />}
-        {aba === 'config' && (
-          <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
-        )}
-      </main>
-      <nav className="barra-nav">
-        {ABAS.map((a) => (
-          <button
-            key={a.id}
-            className={aba === a.id ? 'nav-item ativo' : 'nav-item'}
-            onClick={() => setAba(a.id)}
-          >
-            <span className="nav-icone" aria-hidden>
-              {a.icone}
-            </span>
-            {a.rotulo}
-          </button>
-        ))}
-      </nav>
-    </div>
+    <ErrorBoundary>
+      <div className="app">
+        <main className="conteudo">
+          {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
+          {aba === 'relatorio' && <Relatorio />}
+          {aba === 'historico' && <Historico />}
+          {aba === 'config' && (
+            <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
+          )}
+        </main>
+        <nav className="barra-nav">
+          {ABAS.map((a) => (
+            <button
+              key={a.id}
+              className={aba === a.id ? 'nav-item ativo' : 'nav-item'}
+              onClick={() => setAba(a.id)}
+            >
+              <span className="nav-icone" aria-hidden>
+                {a.icone}
+              </span>
+              {a.rotulo}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </ErrorBoundary>
   )
 }
