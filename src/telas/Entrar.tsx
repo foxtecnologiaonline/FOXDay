@@ -21,7 +21,10 @@ export default function Entrar() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password: senha,
-          options: { data: { nome: nome.trim(), profissao: profissao.trim() } },
+          options: {
+            data: { nome: nome.trim(), profissao: profissao.trim() },
+            emailRedirectTo: window.location.origin,
+          },
         })
         if (error) throw error
         if (!data.session) {

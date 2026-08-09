@@ -24,6 +24,13 @@ npm run build          # build de produção em dist/
 
 No celular, acesse a URL publicada e use "Adicionar à tela inicial" — o app é um PWA instalável.
 
+### Configuração do Supabase Auth (uso pessoal, Fase 1)
+
+No dashboard do projeto Supabase, em **Authentication**:
+
+- **Sign In / Providers → Email → "Confirm email"**: desativar. Como a Fase 1 é uso pessoal (decisão 5 do escopo), a confirmação por e-mail é fricção desnecessária — login deve funcionar direto após o cadastro.
+- **URL Configuration → Site URL**: definir para a URL de produção do app (ex.: a URL da Vercel), não `localhost`. Isso garante que qualquer link de e-mail (recuperação de senha, etc.) aponte para o lugar certo caso a confirmação seja reativada no futuro (fase multiusuário).
+
 ## Stack (aprovada)
 
 - **Frontend:** PWA mobile-first (React + Vite)
