@@ -6,6 +6,7 @@ import ModalConfirmarVoz from '../componentes/ModalConfirmarVoz'
 import { useTarefasHoje } from '../hooks/useTarefasHoje'
 import { useAtrasadas } from '../hooks/useAtrasadas'
 import { useVozCaptura } from '../hooks/useVozCaptura'
+import { useInterpretarVoz } from '../hooks/useInterpretarVoz'
 import {
   adicionarDias,
   formatarDataCurta,
@@ -31,6 +32,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const { tarefas, carregando: carregandoTarefas, marcarConcluida, descartar } = useTarefasHoje()
   const { atrasadas, carregando: carregandoAtrasadas, reagendarParaHoje, descartar: descartarAtrasada } = useAtrasadas(hoje)
   const { estado: vozEstado, iniciar: iniciarVoz, limpar: limparVoz } = useVozCaptura()
+  const { interpretar } = useInterpretarVoz()
 
   const [mantidas, setMantidas] = useState<Set<string>>(new Set())
   const [observacoes, setObservacoes] = useState<Observacao[]>([])
@@ -44,7 +46,10 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
 
   const [mostrarModalVoz, setMostrarModalVoz] = useState(false)
   const [tarefa, setTarefa] = useState('')
+  const [classificacaoInterpretada, setClassificacaoInterpretada] = useState<Classificacao>('importante')
+  const [dataInterpretada, setDataInterpretada] = useState<'hoje' | 'amanha'>('hoje')
   const [confianca, setConfianca] = useState(0)
+  const [interpretando, setInterpretando] = useState(false)
 
   const carregando = carregandoTarefas || carregandoAtrasadas
 
@@ -311,18 +316,30 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                   <button
                     className="botao-secundario"
                     onClick={() => limparVoz()}
+                    disabled={interpretando}
                   >
                     Cancelar
                   </button>
                   <button
                     className="botao-primario"
-                    onClick={() => {
-                      setMostrarModalVoz(true)
-                      setTarefa(vozEstado.transcricao)
-                      setConfianca(80)
+                    onClick={async () => {
+                      setInterpretando(true)
+                      try {
+                        const resultado = await interpretar(vozEstado.transcricao)
+                        setTarefa(resultado.texto)
+                        setClassificacaoInterpretada(resultado.classificacao)
+                        setDataInterpretada(resultado.data)
+                        setConfianca(resultado.confianca)
+                        ultimaClassificacao.current = resultado.classificacao
+                        setDiaAlvo(resultado.data)
+                        setMostrarModalVoz(true)
+                      } finally {
+                        setInterpretando(false)
+                      }
                     }}
+                    disabled={interpretando}
                   >
-                    Confirmar
+                    {interpretando ? 'Interpretando…' : 'Confirmar'}
                   </button>
                 </>
               )}
@@ -334,8 +351,8 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
       {mostrarModalVoz && (
         <ModalConfirmarVoz
           tarefa={tarefa}
-          classificacao={ultimaClassificacao.current}
-          data={diaAlvo}
+          classificacao={classificacaoInterpretada}
+          data={dataInterpretada}
           confianca={confianca}
           processando={salvando}
           onConfirmar={async () => {
@@ -343,8 +360,8 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
             try {
               await supabase.from('tarefa').insert({
                 titulo: tarefa,
-                data: diaAlvo === 'hoje' ? hoje : adicionarDias(hoje, 1),
-                classificacao: ultimaClassificacao.current,
+                data: dataInterpretada === 'hoje' ? hoje : adicionarDias(hoje, 1),
+                classificacao: classificacaoInterpretada,
               })
               limparVoz()
               setMostrarModalVoz(false)

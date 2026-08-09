@@ -1,4 +1,5 @@
 import type { Classificacao, Tarefa } from './dominio'
+import { logErro } from './log'
 
 export interface InterpretacaoVoz {
   texto: string
@@ -7,13 +8,16 @@ export interface InterpretacaoVoz {
   confianca: number
 }
 
+interface ClaudeResponse {
+  content: Array<{ type: string; text: string }>
+}
+
 export class APIClaudeClient {
-  // @ts-ignore - será usado em Fase 2
-  private _apiKey: string
+  private apiKey: string
+  private baseUrl = 'https://api.anthropic.com/v1'
 
   constructor(apiKey: string) {
-    // @ts-ignore - será usado em Fase 2
-    this._apiKey = apiKey
+    this.apiKey = apiKey
   }
 
   /**
@@ -24,16 +28,74 @@ export class APIClaudeClient {
    *   → { texto: "ligar pro contador", classificacao: "importante", data: "amanha", confianca: 95 }
    *
    * @param texto Transcrição de voz em português
-   * @returns Interpretação estruturada (stub retorna baixa confiança até implementar)
+   * @returns Interpretação estruturada
    */
   async interpretarVoz(texto: string): Promise<InterpretacaoVoz> {
-    // TODO: Implementar em Fase 2
-    // Por enquanto, retornar estrutura com confiança baixa (0)
-    return {
-      texto,
-      classificacao: 'importante',
-      data: 'hoje',
-      confianca: 0,
+    try {
+      const prompt = `Você é um assistente especializado em interpretar tarefas faladas em português brasileiro.
+
+O usuário fala uma tarefa em linguagem natural. Você deve extrair:
+1. **Tarefa** (string): descrição concisa da tarefa
+2. **Classificação** (importante | urgente | circunstancial): baseado em contexto
+3. **Data** (hoje | amanha): quando fazer (procure por palavras como "amanhã", "dia que vem", "próximo dia")
+4. **Confiança** (0-100): seu nível de certeza na interpretação
+
+Responda em JSON válido (APENAS o JSON, sem markdown code blocks):
+{
+  "tarefa": "...",
+  "classificacao": "...",
+  "data": "...",
+  "confianca": 90
+}
+
+Entrada do usuário: "${texto}"`
+
+      const response = await fetch(`${this.baseUrl}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: 256,
+          messages: [
+            {
+              role: 'user',
+              content: prompt,
+            },
+          ],
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(`Claude API error: ${error.error?.message || response.statusText}`)
+      }
+
+      const data = (await response.json()) as ClaudeResponse
+      const textContent = data.content.find((c) => c.type === 'text')?.text || '{}'
+
+      const parsed = JSON.parse(textContent)
+
+      return {
+        texto: parsed.tarefa || texto,
+        classificacao: (['importante', 'urgente', 'circunstancial'].includes(parsed.classificacao)
+          ? parsed.classificacao
+          : 'importante') as Classificacao,
+        data: parsed.data === 'amanha' ? 'amanha' : 'hoje',
+        confianca: Math.min(100, Math.max(0, parsed.confianca || 70)),
+      }
+    } catch (e) {
+      logErro('APIClaudeClient.interpretarVoz', e as Error)
+      // Fallback: retornar interpretação conservadora
+      return {
+        texto,
+        classificacao: 'importante',
+        data: 'hoje',
+        confianca: 0,
+      }
     }
   }
 
