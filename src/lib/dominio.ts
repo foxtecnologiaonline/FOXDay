@@ -2,6 +2,7 @@
 
 export type Classificacao = 'importante' | 'urgente' | 'circunstancial'
 export type StatusTarefa = 'pendente' | 'concluida' | 'descartada'
+export type StatusDelegacao = 'nao_delegada' | 'delegada' | 'cumprida' | 'nao_cumprida'
 
 export interface Tarefa {
   id: string
@@ -11,6 +12,14 @@ export interface Tarefa {
   status: StatusTarefa
   criada_em: string
   concluida_em: string | null
+  // Delegação
+  delegada_para?: string | null
+  prazo_delegacao?: string | null // AAAA-MM-DD
+  status_delegacao?: StatusDelegacao
+  // Rotina
+  eh_rotina?: boolean
+  dias_rotina?: number[] // 0=seg, 1=ter, ..., 6=dom
+  rotina_id?: string | null
 }
 
 export interface Observacao {

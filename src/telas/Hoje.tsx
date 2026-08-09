@@ -3,6 +3,7 @@ import type { Perfil } from '../App'
 import { supabase } from '../lib/supabase'
 import SkeletonTarefa from '../componentes/SkeletonTarefa'
 import ModalConfirmarVoz from '../componentes/ModalConfirmarVoz'
+import ModalOpcoesTarefa from '../componentes/ModalOpcoesTarefa'
 import { useTarefasHoje } from '../hooks/useTarefasHoje'
 import { useAtrasadas } from '../hooks/useAtrasadas'
 import { useVozCaptura } from '../hooks/useVozCaptura'
@@ -25,6 +26,36 @@ import {
 interface Props {
   perfil: Perfil | null
   irParaRelatorio: () => void
+}
+
+function gerarInstanciasRotina(
+  rotinaMaeId: string,
+  titulo: string,
+  classificacao: Classificacao,
+  diasRotina: number[]
+): any[] {
+  const instancias = []
+  const hoje = new Date()
+
+  // Gerar instâncias para os próximos 14 dias
+  for (let i = 0; i < 14; i++) {
+    const data = new Date(hoje)
+    data.setDate(data.getDate() + i)
+    const diaSemana = data.getDay() === 0 ? 6 : data.getDay() - 1 // Converter domingo
+
+    if (diasRotina.includes(diaSemana)) {
+      const dataFormatada = data.toISOString().split('T')[0]
+      instancias.push({
+        titulo,
+        data: dataFormatada,
+        classificacao,
+        eh_rotina: true,
+        dias_rotina: diasRotina,
+        rotina_id: rotinaMaeId,
+      })
+    }
+  }
+  return instancias
 }
 
 export default function Hoje({ perfil, irParaRelatorio }: Props) {
@@ -50,6 +81,15 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const [dataInterpretada, setDataInterpretada] = useState<'hoje' | 'amanha'>('hoje')
   const [confianca, setConfianca] = useState(0)
   const [interpretando, setInterpretando] = useState(false)
+
+  const [mostrarOpcoes, setMostrarOpcoes] = useState(false)
+  const [opcoesTarefa, setOpcoesTarefa] = useState({
+    ehRotina: false,
+    diasRotina: [] as number[],
+    ehDelegada: false,
+    delegadaPara: null as string | null,
+    prazoDelegacao: null as string | null,
+  })
 
   const carregando = carregandoTarefas || carregandoAtrasadas
 
@@ -77,13 +117,53 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
       } else {
         const c = classificacao ?? ultimaClassificacao.current
         ultimaClassificacao.current = c
-        await supabase.from('tarefa').insert({
-          titulo: conteudo,
-          data: diaAlvo === 'hoje' ? hoje : adicionarDias(hoje, 1),
-          classificacao: c,
-        })
+        const dataInserção = diaAlvo === 'hoje' ? hoje : adicionarDias(hoje, 1)
+
+        if (opcoesTarefa.ehRotina && opcoesTarefa.diasRotina.length > 0) {
+          // Criar tarefa "mãe" de rotina (sem data específica, usamos hoje como ref)
+          const { data: rotinaMae } = await supabase
+            .from('tarefa')
+            .insert({
+              titulo: conteudo,
+              data: dataInserção,
+              classificacao: c,
+              eh_rotina: true,
+              dias_rotina: opcoesTarefa.diasRotina,
+            })
+            .select()
+
+          // Criar instâncias da rotina para os próximos dias marcados
+          if (rotinaMae && rotinaMae.length > 0) {
+            const tarefasRotina = gerarInstanciasRotina(
+              rotinaMae[0].id,
+              conteudo,
+              c,
+              opcoesTarefa.diasRotina
+            )
+            if (tarefasRotina.length > 0) {
+              await supabase.from('tarefa').insert(tarefasRotina)
+            }
+          }
+        } else {
+          // Tarefa normal (com opção de delegação)
+          await supabase.from('tarefa').insert({
+            titulo: conteudo,
+            data: dataInserção,
+            classificacao: c,
+            delegada_para: opcoesTarefa.ehDelegada ? opcoesTarefa.delegadaPara : null,
+            prazo_delegacao: opcoesTarefa.ehDelegada ? opcoesTarefa.prazoDelegacao : null,
+            status_delegacao: opcoesTarefa.ehDelegada ? 'delegada' : 'nao_delegada',
+          })
+        }
       }
       setTexto('')
+      setOpcoesTarefa({
+        ehRotina: false,
+        diasRotina: [],
+        ehDelegada: false,
+        delegadaPara: null,
+        prazoDelegacao: null,
+      })
     } finally {
       setSalvando(false)
     }
@@ -240,16 +320,25 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
             />
             <div className="captura-acoes">
               {modo === 'tarefa' ? (
-                CLASSIFICACOES.map((c) => (
+                <>
                   <button
-                    key={c}
-                    className={`botao-classificacao ${c}`}
+                    className="botao-secundario"
                     disabled={!texto.trim() || salvando}
-                    onClick={() => salvar(c)}
+                    onClick={() => setMostrarOpcoes(true)}
                   >
-                    {ROTULO_CLASSIFICACAO[c]}
+                    ⚙️ Opções
                   </button>
-                ))
+                  {CLASSIFICACOES.map((c) => (
+                    <button
+                      key={c}
+                      className={`botao-classificacao ${c}`}
+                      disabled={!texto.trim() || salvando}
+                      onClick={() => salvar(c)}
+                    >
+                      {ROTULO_CLASSIFICACAO[c]}
+                    </button>
+                  ))}
+                </>
               ) : (
                 <button
                   className="botao-primario"
@@ -376,6 +465,24 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
           }}
         />
       )}
+
+      <ModalOpcoesTarefa
+        aberto={mostrarOpcoes}
+        titulo={texto}
+        classificacao={ultimaClassificacao.current}
+        data={diaAlvo}
+        onCancelar={() => setMostrarOpcoes(false)}
+        onConfirmar={(dados) => {
+          setOpcoesTarefa({
+            ehRotina: dados.ehRotina,
+            diasRotina: dados.diasRotina,
+            ehDelegada: dados.ehDelegada,
+            delegadaPara: dados.delegadaPara,
+            prazoDelegacao: dados.prazoDelegacao,
+          })
+          setMostrarOpcoes(false)
+        }}
+      />
     </div>
   )
 }
