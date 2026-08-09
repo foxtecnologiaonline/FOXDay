@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import SkeletonCard from '../componentes/SkeletonCard'
 import { adicionarDias, formatarDataLonga, hojeISO } from '../lib/datas'
 import {
   CLASSIFICACOES,
@@ -24,8 +25,10 @@ export default function Relatorio() {
   const [obsFinal, setObsFinal] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [mensagem, setMensagem] = useState('')
+  const [carregando, setCarregando] = useState(true)
 
   const carregar = useCallback(async () => {
+    setCarregando(true)
     const [t, o, r] = await Promise.all([
       supabase.from('tarefa').select('*').eq('data', data),
       supabase.from('observacao').select('*').eq('data', data).order('criado_em'),
@@ -38,6 +41,7 @@ export default function Relatorio() {
     setNota(fech?.nota ?? 0)
     setObsFinal(fech?.observacao ?? '')
     setMensagem('')
+    setCarregando(false)
   }, [data])
 
   useEffect(() => {
@@ -89,36 +93,45 @@ export default function Relatorio() {
         </button>
       </header>
 
-      <section className="cartao destaque">
-        <p className="numero-grande">
-          {resumo.concluidas}
-          <span className="numero-sufixo">/{resumo.planejadas} concluídas</span>
-        </p>
-        <div className="barra">
-          <div className="barra-preenchida" style={{ width: `${resumo.percentual}%` }} />
-        </div>
-        <p className="texto-suave">{resumo.percentual}% do dia planejado</p>
-      </section>
-
-      <section className="cartao">
-        <h2>Por importância</h2>
-        {CLASSIFICACOES.map((c) => {
-          const r = resumo.porClassificacao[c]
-          const pct = r.planejadas === 0 ? 0 : Math.round((r.concluidas / r.planejadas) * 100)
-          return (
-            <div key={c} className="linha-classificacao">
-              <span className={`selo ${c}`}>{ROTULO_CLASSIFICACAO[c][0]}</span>
-              <span className="rotulo-classificacao">{ROTULO_CLASSIFICACAO[c]}</span>
-              <div className={`barra fina ${c}`}>
-                <div className="barra-preenchida" style={{ width: `${pct}%` }} />
-              </div>
-              <span className="contagem">
-                {r.concluidas}/{r.planejadas}
-              </span>
+      {carregando ? (
+        <>
+          <SkeletonCard />
+          <SkeletonCard />
+        </>
+      ) : (
+        <>
+          <section className="cartao destaque">
+            <p className="numero-grande">
+              {resumo.concluidas}
+              <span className="numero-sufixo">/{resumo.planejadas} concluídas</span>
+            </p>
+            <div className="barra">
+              <div className="barra-preenchida" style={{ width: `${resumo.percentual}%` }} />
             </div>
-          )
-        })}
-      </section>
+            <p className="texto-suave">{resumo.percentual}% do dia planejado</p>
+          </section>
+
+          <section className="cartao">
+            <h2>Por importância</h2>
+            {CLASSIFICACOES.map((c) => {
+              const r = resumo.porClassificacao[c]
+              const pct = r.planejadas === 0 ? 0 : Math.round((r.concluidas / r.planejadas) * 100)
+              return (
+                <div key={c} className="linha-classificacao">
+                  <span className={`selo ${c}`}>{ROTULO_CLASSIFICACAO[c][0]}</span>
+                  <span className="rotulo-classificacao">{ROTULO_CLASSIFICACAO[c]}</span>
+                  <div className={`barra fina ${c}`}>
+                    <div className="barra-preenchida" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="contagem">
+                    {r.concluidas}/{r.planejadas}
+                  </span>
+                </div>
+              )
+            })}
+          </section>
+        </>
+      )}
 
       {observacoes.length > 0 && (
         <section className="cartao">
