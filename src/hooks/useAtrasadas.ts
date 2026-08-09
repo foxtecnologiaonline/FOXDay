@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase, supabaseCall } from '../lib/supabase'
 import { logErro } from '../lib/log'
 import { pendentesAnteriores } from '../lib/dominio'
-import type { ErroFoxDay, Tarefa } from '../lib/dominio'
+import type { Tarefa } from '../lib/dominio'
+import type { ErroFoxDay } from '../lib/erros'
 
 export function useAtrasadas(hoje: string) {
   const [atrasadas, setAtrasadas] = useState<Tarefa[]>([])

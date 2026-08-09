@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Perfil } from '../App'
-import { supabase, supabaseCall } from '../lib/supabase'
-import { logErro } from '../lib/log'
+import { supabase } from '../lib/supabase'
 import SkeletonTarefa from '../componentes/SkeletonTarefa'
+import { useTarefasHoje } from '../hooks/useTarefasHoje'
+import { useAtrasadas } from '../hooks/useAtrasadas'
 import {
   adicionarDias,
   formatarDataCurta,
@@ -14,10 +15,8 @@ import {
   CLASSIFICACOES,
   ROTULO_CLASSIFICACAO,
   ordenarTarefas,
-  pendentesAnteriores,
   type Classificacao,
   type Observacao,
-  type Tarefa,
 } from '../lib/dominio'
 
 interface Props {
@@ -27,12 +26,12 @@ interface Props {
 
 export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const hoje = hojeISO()
-  const [tarefas, setTarefas] = useState<Tarefa[]>([])
-  const [atrasadas, setAtrasadas] = useState<Tarefa[]>([])
+  const { tarefas, carregando: carregandoTarefas, marcarConcluida, descartar } = useTarefasHoje()
+  const { atrasadas, carregando: carregandoAtrasadas, reagendarParaHoje, descartar: descartarAtrasada } = useAtrasadas(hoje)
+
   const [mantidas, setMantidas] = useState<Set<string>>(new Set())
   const [observacoes, setObservacoes] = useState<Observacao[]>([])
   const [diaFechado, setDiaFechado] = useState(true)
-  const [carregando, setCarregando] = useState(true)
 
   const [texto, setTexto] = useState('')
   const [modo, setModo] = useState<'tarefa' | 'obs'>('tarefa')
@@ -40,28 +39,20 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const [salvando, setSalvando] = useState(false)
   const ultimaClassificacao = useRef<Classificacao>('importante')
 
-  const carregar = useCallback(async () => {
-    const [tHoje, tAtrasadas, obs, rel] = await Promise.all([
-      supabase
-        .from('tarefa')
-        .select('*')
-        .eq('data', hoje)
-        .neq('status', 'descartada')
-        .order('criada_em'),
-      supabase.from('tarefa').select('*').lt('data', hoje).eq('status', 'pendente').order('data'),
+  const carregando = carregandoTarefas || carregandoAtrasadas
+
+  const carregarObsEDiaFechado = useCallback(async () => {
+    const [obs, rel] = await Promise.all([
       supabase.from('observacao').select('*').eq('data', hoje).order('criado_em'),
       supabase.from('relatorio_dia').select('id').eq('data', hoje).maybeSingle(),
     ])
-    setTarefas((tHoje.data as Tarefa[]) ?? [])
-    setAtrasadas(pendentesAnteriores((tAtrasadas.data as Tarefa[]) ?? [], hoje))
     setObservacoes((obs.data as Observacao[]) ?? [])
     setDiaFechado(Boolean(rel.data))
-    setCarregando(false)
   }, [hoje])
 
   useEffect(() => {
-    carregar()
-  }, [carregar])
+    carregarObsEDiaFechado()
+  }, [carregarObsEDiaFechado])
 
   async function salvar(classificacao?: Classificacao) {
     const conteudo = texto.trim()
@@ -70,6 +61,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
     try {
       if (modo === 'obs') {
         await supabase.from('observacao').insert({ texto: conteudo, data: hoje })
+        await carregarObsEDiaFechado()
       } else {
         const c = classificacao ?? ultimaClassificacao.current
         ultimaClassificacao.current = c
@@ -80,59 +72,9 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
         })
       }
       setTexto('')
-      await carregar()
     } finally {
       setSalvando(false)
     }
-  }
-
-  async function alternarConclusao(t: Tarefa) {
-    const concluir = t.status !== 'concluida'
-    const statusAnterior = t.status
-
-    // 1. Optimistic update: atualizar localmente imediatamente
-    setTarefas((prev) =>
-      prev.map((tarefa) =>
-        tarefa.id === t.id
-          ? {
-              ...tarefa,
-              status: concluir ? 'concluida' : 'pendente',
-              concluida_em: concluir ? new Date().toISOString() : null,
-            }
-          : tarefa
-      )
-    )
-
-    // 2. Async: confirmar no servidor
-    const { erro } = await supabaseCall(async () => {
-      return supabase
-        .from('tarefa')
-        .update({
-          status: concluir ? 'concluida' : 'pendente',
-          concluida_em: concluir ? new Date().toISOString() : null,
-        })
-        .eq('id', t.id)
-    })
-
-    // 3. Se erro: reverter
-    if (erro) {
-      setTarefas((prev) =>
-        prev.map((tarefa) =>
-          tarefa.id === t.id ? { ...tarefa, status: statusAnterior, concluida_em: t.concluida_em } : tarefa
-        )
-      )
-      logErro('Erro ao marcar tarefa', erro)
-    }
-  }
-
-  async function descartar(t: Tarefa) {
-    await supabase.from('tarefa').update({ status: 'descartada' }).eq('id', t.id)
-    await carregar()
-  }
-
-  async function reagendarParaHoje(t: Tarefa) {
-    await supabase.from('tarefa').update({ data: hoje }).eq('id', t.id)
-    await carregar()
   }
 
   const listaTriagem = atrasadas.filter((t) => !mantidas.has(t.id))
@@ -169,9 +111,9 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                   <span className="triagem-data">{formatarDataCurta(t.data)}</span>
                 </div>
                 <div className="triagem-acoes">
-                  <button onClick={() => reagendarParaHoje(t)}>→ Hoje</button>
+                  <button onClick={() => reagendarParaHoje(t.id)}>→ Hoje</button>
                   <button onClick={() => setMantidas(new Set([...mantidas, t.id]))}>Manter</button>
-                  <button className="perigo" onClick={() => descartar(t)}>
+                  <button className="perigo" onClick={() => descartarAtrasada(t.id)}>
                     Descartar
                   </button>
                 </div>
@@ -206,7 +148,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                   <input
                     type="checkbox"
                     checked={t.status === 'concluida'}
-                    onChange={() => alternarConclusao(t)}
+                    onChange={() => marcarConcluida(t.id)}
                   />
                   <span className="titulo-tarefa">{t.titulo}</span>
                 </label>
@@ -217,7 +159,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                   <button
                     className="botao-descartar"
                     title="Descartar"
-                    onClick={() => descartar(t)}
+                    onClick={() => descartar(t.id)}
                   >
                     ✕
                   </button>

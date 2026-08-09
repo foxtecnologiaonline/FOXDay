@@ -7,19 +7,13 @@ export interface InterpretacaoVoz {
   confianca: number
 }
 
-interface ClaudeConfig {
-  apiKey: string
-  baseUrl: string
-}
-
 export class APIClaudeClient {
-  private config: ClaudeConfig
+  // @ts-ignore - será usado em Fase 2
+  private _apiKey: string
 
   constructor(apiKey: string) {
-    this.config = {
-      apiKey,
-      baseUrl: 'https://api.anthropic.com/v1',
-    }
+    // @ts-ignore - será usado em Fase 2
+    this._apiKey = apiKey
   }
 
   /**

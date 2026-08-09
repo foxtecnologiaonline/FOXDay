@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase, supabaseCall } from '../lib/supabase'
 import { logErro } from '../lib/log'
-import type { ErroFoxDay, Observacao, Tarefa } from '../lib/dominio'
+import type { Observacao, Tarefa } from '../lib/dominio'
+import { TipoErro, type ErroFoxDay } from '../lib/erros'
 
 interface Fechamento {
   nota: number | null
@@ -32,11 +33,11 @@ export function useRelatorioData(data: string) {
     setFechamento(fechData)
 
     if (t.error) {
-      setErro({ tipo: 'banco_dados', mensagem: t.error.message })
+      setErro({ tipo: TipoErro.BANCO_DADOS, mensagem: t.error.message })
       logErro('Erro ao carregar tarefas do relatório', t.error)
     }
     if (o.error) {
-      setErro({ tipo: 'banco_dados', mensagem: o.error.message })
+      setErro({ tipo: TipoErro.BANCO_DADOS, mensagem: o.error.message })
       logErro('Erro ao carregar observações', o.error)
     }
 
