@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigurado } from './lib/supabase'
 import ErrorBoundary from './ComponenteErro'
 import Entrar from './telas/Entrar'
-import Hoje from './telas/Hoje'
-import Relatorio from './telas/Relatorio'
-import Historico from './telas/Historico'
-import Config from './telas/Config'
+
+// Lazy-load telas de navegação (carregadas sob demanda)
+const Hoje = lazy(() => import('./telas/Hoje'))
+const Relatorio = lazy(() => import('./telas/Relatorio'))
+const Historico = lazy(() => import('./telas/Historico'))
+const Config = lazy(() => import('./telas/Config'))
 
 export interface Perfil {
   id: string
@@ -84,12 +86,14 @@ export default function App() {
     <ErrorBoundary>
       <div className="app">
         <main className="conteudo">
-          {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
-          {aba === 'relatorio' && <Relatorio />}
-          {aba === 'historico' && <Historico />}
-          {aba === 'config' && (
-            <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
-          )}
+          <Suspense fallback={<div className="tela-central"><p>Carregando…</p></div>}>
+            {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
+            {aba === 'relatorio' && <Relatorio />}
+            {aba === 'historico' && <Historico />}
+            {aba === 'config' && (
+              <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
+            )}
+          </Suspense>
         </main>
         <nav className="barra-nav">
           {ABAS.map((a) => (
