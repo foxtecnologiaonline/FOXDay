@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { calcularResumo, type Tarefa, type Observacao } from '../lib/dominio'
-import { formatarDataCurta, formatarDataLonga } from '../lib/datas'
+import { formatarDataLonga } from '../lib/datas'
 import SkeletonTarefa from '../componentes/SkeletonTarefa'
 
 interface DiaInfo {
