@@ -183,6 +183,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
               await supabase.from('tarefa').insert(tarefasRotina)
             }
           }
+          await carregar()
         } else {
           // Tarefa normal (com opção de delegação)
           await supabase.from('tarefa').insert({
@@ -193,6 +194,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
             prazo_delegacao: opcoesTarefa.ehDelegada ? opcoesTarefa.prazoDelegacao : null,
             status_delegacao: opcoesTarefa.ehDelegada ? 'delegada' : 'nao_delegada',
           })
+          await carregar()
         }
       }
       setTexto('')
@@ -519,6 +521,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                 data: d === 'hoje' ? hoje : adicionarDias(hoje, 1),
                 classificacao: c,
               })
+              await carregar()
               limparVoz()
               setMostrarModalVoz(false)
               setModo('tarefa')
