@@ -8,6 +8,7 @@ import Entrar from './telas/Entrar'
 const Hoje = lazy(() => import('./telas/Hoje'))
 const Relatorio = lazy(() => import('./telas/Relatorio'))
 const Historico = lazy(() => import('./telas/Historico'))
+const Calendario = lazy(() => import('./telas/Calendario'))
 const Config = lazy(() => import('./telas/Config'))
 
 export interface Perfil {
@@ -17,12 +18,13 @@ export interface Perfil {
   horario_relatorio: string
 }
 
-type Aba = 'hoje' | 'relatorio' | 'historico' | 'config'
+type Aba = 'hoje' | 'relatorio' | 'historico' | 'calendario' | 'config'
 
 const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   { id: 'hoje', rotulo: 'Hoje', icone: '☀️' },
   { id: 'relatorio', rotulo: 'Relatório', icone: '📊' },
   { id: 'historico', rotulo: 'Histórico', icone: '🗓️' },
+  { id: 'calendario', rotulo: 'Calendário', icone: '📅' },
   { id: 'config', rotulo: 'Ajustes', icone: '⚙️' },
 ]
 
@@ -90,6 +92,7 @@ export default function App() {
             {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
             {aba === 'relatorio' && <Relatorio />}
             {aba === 'historico' && <Historico />}
+            {aba === 'calendario' && <Calendario />}
             {aba === 'config' && (
               <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
             )}
