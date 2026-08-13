@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { Perfil } from '../App'
 import { supabase } from '../lib/supabase'
+import SkeletonTarefa from '../componentes/SkeletonTarefa'
+import ModalConfirmarVoz from '../componentes/ModalConfirmarVoz'
+import ModalOpcoesTarefa from '../componentes/ModalOpcoesTarefa'
+import MenuStatusDelegacao from '../componentes/MenuStatusDelegacao'
+import FiltrosHoje from '../componentes/FiltrosHoje'
+import type { StatusDelegacao } from '../lib/dominio'
+import { useTarefasHoje } from '../hooks/useTarefasHoje'
+import { useAtrasadas } from '../hooks/useAtrasadas'
+import { useVozCaptura } from '../hooks/useVozCaptura'
+import { useInterpretarVoz } from '../hooks/useInterpretarVoz'
 import {
   adicionarDias,
   formatarDataCurta,
@@ -12,73 +22,134 @@ import {
   CLASSIFICACOES,
   ROTULO_CLASSIFICACAO,
   ordenarTarefas,
-  pendentesAnteriores,
   type Classificacao,
   type Observacao,
-  type Origem,
-  type Tarefa,
 } from '../lib/dominio'
 import { ACCEPT_INPUT_ARQUIVO, FORMATOS_ACEITOS } from '../lib/audio'
-import {
-  ErroTranscricao,
-  extensaoParaMimeType,
-  mimeTypeSuportado,
-  transcreverAudio,
-  validarArquivoAudio,
-} from '../lib/transcricao'
+import { ErroTranscricao, transcreverAudio, validarArquivoAudio } from '../lib/transcricao'
 
 interface Props {
   perfil: Perfil | null
   irParaRelatorio: () => void
 }
 
+function gerarInstanciasRotina(
+  rotinaMaeId: string,
+  titulo: string,
+  classificacao: Classificacao,
+  diasRotina: number[]
+): any[] {
+  const instancias = []
+  const hoje = new Date()
+
+  // Gerar instâncias para os próximos 14 dias
+  for (let i = 0; i < 14; i++) {
+    const data = new Date(hoje)
+    data.setDate(data.getDate() + i)
+    const diaSemana = data.getDay() === 0 ? 6 : data.getDay() - 1 // Converter domingo
+
+    if (diasRotina.includes(diaSemana)) {
+      const dataFormatada = data.toISOString().split('T')[0]
+      instancias.push({
+        titulo,
+        data: dataFormatada,
+        classificacao,
+        eh_rotina: true,
+        dias_rotina: diasRotina,
+        rotina_id: rotinaMaeId,
+      })
+    }
+  }
+  return instancias
+}
+
+function diasRotinaPorExtenso(dias: number[]): string {
+  const nomes = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom']
+  return dias.map(d => nomes[d]).join('-')
+}
+
+function renderarIndicadores(t: any) {
+  return (
+    <>
+      {t.delegada_para && (
+        <span className="indicador-delegacao" title={`Delegada para ${t.delegada_para}`}>
+          👤 {t.delegada_para}
+          {t.prazo_delegacao && <span className="prazo"> ({formatarDataCurta(t.prazo_delegacao)})</span>}
+        </span>
+      )}
+      {t.eh_rotina && t.dias_rotina && (
+        <span className="indicador-rotina" title="Tarefa rotineira">
+          🔄 {diasRotinaPorExtenso(t.dias_rotina)}
+        </span>
+      )}
+    </>
+  )
+}
+
+async function mudarStatusDelegacao(tarefaId: string, novoStatus: StatusDelegacao) {
+  const { error } = await supabase
+    .from('tarefa')
+    .update({ status_delegacao: novoStatus })
+    .eq('id', tarefaId)
+
+  if (error) {
+    console.error('Erro ao atualizar status de delegação:', error)
+    throw error
+  }
+}
+
 export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const hoje = hojeISO()
-  const [tarefas, setTarefas] = useState<Tarefa[]>([])
-  const [atrasadas, setAtrasadas] = useState<Tarefa[]>([])
+  const { tarefas, carregando: carregandoTarefas, marcarConcluida, descartar, carregar } = useTarefasHoje()
+  const { atrasadas, carregando: carregandoAtrasadas, reagendarParaHoje, descartar: descartarAtrasada } = useAtrasadas(hoje)
+  const { estado: vozEstado, iniciar: iniciarVoz, limpar: limparVoz } = useVozCaptura()
+  const { interpretar } = useInterpretarVoz()
+
   const [mantidas, setMantidas] = useState<Set<string>>(new Set())
   const [observacoes, setObservacoes] = useState<Observacao[]>([])
   const [diaFechado, setDiaFechado] = useState(true)
-  const [carregando, setCarregando] = useState(true)
 
   const [texto, setTexto] = useState('')
-  const [origemAtual, setOrigemAtual] = useState<Origem>('texto')
-  const [modo, setModo] = useState<'tarefa' | 'obs'>('tarefa')
+  const [modo, setModo] = useState<'tarefa' | 'obs' | 'voz'>('tarefa')
   const [diaAlvo, setDiaAlvo] = useState<'hoje' | 'amanha'>('hoje')
   const [salvando, setSalvando] = useState(false)
   const ultimaClassificacao = useRef<Classificacao>('importante')
 
-  const [painelAudioAberto, setPainelAudioAberto] = useState(false)
-  const [gravando, setGravando] = useState(false)
-  const [transcrevendo, setTranscrevendo] = useState(false)
-  const [erroAudio, setErroAudio] = useState('')
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
+  const [mostrarModalVoz, setMostrarModalVoz] = useState(false)
+  const [tarefa, setTarefa] = useState('')
+  const [classificacaoInterpretada, setClassificacaoInterpretada] = useState<Classificacao>('importante')
+  const [dataInterpretada, setDataInterpretada] = useState<'hoje' | 'amanha'>('hoje')
+  const [confianca, setConfianca] = useState(0)
+  const [interpretando, setInterpretando] = useState(false)
+
+  const [transcrevendoArquivo, setTranscrevendoArquivo] = useState(false)
+  const [erroArquivo, setErroArquivo] = useState('')
   const arquivoInputRef = useRef<HTMLInputElement>(null)
 
-  const carregar = useCallback(async () => {
-    const [tHoje, tAtrasadas, obs, rel] = await Promise.all([
-      supabase
-        .from('tarefa')
-        .select('*')
-        .eq('data', hoje)
-        .neq('status', 'descartada')
-        .order('criada_em'),
-      supabase.from('tarefa').select('*').lt('data', hoje).eq('status', 'pendente').order('data'),
+  const [mostrarOpcoes, setMostrarOpcoes] = useState(false)
+  const [opcoesTarefa, setOpcoesTarefa] = useState({
+    ehRotina: false,
+    diasRotina: [] as number[],
+    ehDelegada: false,
+    delegadaPara: null as string | null,
+    prazoDelegacao: null as string | null,
+  })
+  const [filtros, setFiltros] = useState({ delegadas: false, rotinas: false })
+
+  const carregando = carregandoTarefas || carregandoAtrasadas
+
+  const carregarObsEDiaFechado = useCallback(async () => {
+    const [obs, rel] = await Promise.all([
       supabase.from('observacao').select('*').eq('data', hoje).order('criado_em'),
       supabase.from('relatorio_dia').select('id').eq('data', hoje).maybeSingle(),
     ])
-    setTarefas((tHoje.data as Tarefa[]) ?? [])
-    setAtrasadas(pendentesAnteriores((tAtrasadas.data as Tarefa[]) ?? [], hoje))
     setObservacoes((obs.data as Observacao[]) ?? [])
     setDiaFechado(Boolean(rel.data))
-    setCarregando(false)
   }, [hoje])
 
   useEffect(() => {
-    carregar()
-  }, [carregar])
+    carregarObsEDiaFechado()
+  }, [carregarObsEDiaFechado])
 
   async function salvar(classificacao?: Classificacao) {
     const conteudo = texto.trim()
@@ -86,120 +157,115 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
     setSalvando(true)
     try {
       if (modo === 'obs') {
-        await supabase
-          .from('observacao')
-          .insert({ texto: conteudo, data: hoje, origem: origemAtual })
+        await supabase.from('observacao').insert({ texto: conteudo, data: hoje })
+        await carregarObsEDiaFechado()
       } else {
         const c = classificacao ?? ultimaClassificacao.current
         ultimaClassificacao.current = c
-        await supabase.from('tarefa').insert({
-          titulo: conteudo,
-          data: diaAlvo === 'hoje' ? hoje : adicionarDias(hoje, 1),
-          classificacao: c,
-          origem: origemAtual,
-        })
+        const dataInserção = diaAlvo === 'hoje' ? hoje : adicionarDias(hoje, 1)
+
+        if (opcoesTarefa.ehRotina && opcoesTarefa.diasRotina.length > 0) {
+          // Criar tarefa "mãe" de rotina (sem data específica, usamos hoje como ref)
+          const { data: rotinaMae } = await supabase
+            .from('tarefa')
+            .insert({
+              titulo: conteudo,
+              data: dataInserção,
+              classificacao: c,
+              eh_rotina: true,
+              dias_rotina: opcoesTarefa.diasRotina,
+            })
+            .select()
+
+          // Criar instâncias da rotina para os próximos dias marcados
+          if (rotinaMae && rotinaMae.length > 0) {
+            const tarefasRotina = gerarInstanciasRotina(
+              rotinaMae[0].id,
+              conteudo,
+              c,
+              opcoesTarefa.diasRotina
+            )
+            if (tarefasRotina.length > 0) {
+              await supabase.from('tarefa').insert(tarefasRotina)
+            }
+          }
+          await carregar()
+        } else {
+          // Tarefa normal (com opção de delegação)
+          await supabase.from('tarefa').insert({
+            titulo: conteudo,
+            data: dataInserção,
+            classificacao: c,
+            delegada_para: opcoesTarefa.ehDelegada ? opcoesTarefa.delegadaPara : null,
+            prazo_delegacao: opcoesTarefa.ehDelegada ? opcoesTarefa.prazoDelegacao : null,
+            status_delegacao: opcoesTarefa.ehDelegada ? 'delegada' : 'nao_delegada',
+          })
+          await carregar()
+        }
       }
       setTexto('')
-      setOrigemAtual('texto')
-      await carregar()
+      setOpcoesTarefa({
+        ehRotina: false,
+        diasRotina: [],
+        ehDelegada: false,
+        delegadaPara: null,
+        prazoDelegacao: null,
+      })
     } finally {
       setSalvando(false)
     }
   }
 
-  // Compartilhado entre gravação ao vivo e upload de arquivo: manda o áudio
-  // para a função de transcrição e preenche o campo de captura (o usuário
-  // ainda revisa e confirma antes de salvar — a IA sugere, não decide).
-  async function processarAudio(blob: Blob, nomeArquivo: string) {
-    setTranscrevendo(true)
-    setErroAudio('')
+  // Compartilhado entre voz ao vivo (Web Speech API) e arquivo enviado
+  // (Whisper): depois de ter um texto transcrito, os dois caminhos convergem
+  // para a mesma interpretação (API Claude) e o mesmo modal de confirmação.
+  async function interpretarEAbrirModal(textoTranscrito: string) {
+    setInterpretando(true)
     try {
-      const resultado = await transcreverAudio(blob, nomeArquivo)
-      setTexto(resultado)
-      setOrigemAtual('voz')
-      setPainelAudioAberto(false)
-    } catch (excecao) {
-      setErroAudio(
-        excecao instanceof ErroTranscricao ? excecao.message : 'Erro ao transcrever o áudio.'
-      )
+      const resultado = await interpretar(textoTranscrito)
+      setTarefa(resultado.texto)
+      setClassificacaoInterpretada(resultado.classificacao)
+      setDataInterpretada(resultado.data)
+      setConfianca(resultado.confianca)
+      ultimaClassificacao.current = resultado.classificacao
+      setDiaAlvo(resultado.data)
+      setMostrarModalVoz(true)
     } finally {
-      setTranscrevendo(false)
+      setInterpretando(false)
     }
   }
 
-  async function iniciarGravacao() {
-    setErroAudio('')
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      streamRef.current = stream
-      const mimeType = mimeTypeSuportado()
-      const gravador = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
-      chunksRef.current = []
-      gravador.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
-      gravador.onstop = () => {
-        streamRef.current?.getTracks().forEach((t) => t.stop())
-        streamRef.current = null
-        const tipo = gravador.mimeType || mimeType || 'audio/webm'
-        const blob = new Blob(chunksRef.current, { type: tipo })
-        void processarAudio(blob, `gravacao.${extensaoParaMimeType(tipo)}`)
-      }
-      gravador.start()
-      mediaRecorderRef.current = gravador
-      setGravando(true)
-    } catch {
-      setErroAudio('Não foi possível acessar o microfone.')
-    }
-  }
-
-  function pararGravacao() {
-    mediaRecorderRef.current?.stop()
-    setGravando(false)
-  }
-
-  function aoSelecionarArquivo(e: ChangeEvent<HTMLInputElement>) {
+  async function aoSelecionarArquivo(e: ChangeEvent<HTMLInputElement>) {
     const arquivo = e.target.files?.[0]
     e.target.value = ''
     if (!arquivo) return
-    const erro = validarArquivoAudio(arquivo)
-    if (erro) {
-      setErroAudio(erro)
+    const erroValidacao = validarArquivoAudio(arquivo)
+    if (erroValidacao) {
+      setErroArquivo(erroValidacao)
       return
     }
-    void processarAudio(arquivo, arquivo.name)
-  }
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop())
+    setErroArquivo('')
+    setTranscrevendoArquivo(true)
+    try {
+      const textoTranscrito = await transcreverAudio(arquivo, arquivo.name)
+      await interpretarEAbrirModal(textoTranscrito)
+    } catch (excecao) {
+      setErroArquivo(
+        excecao instanceof ErroTranscricao ? excecao.message : 'Erro ao transcrever o áudio.'
+      )
+    } finally {
+      setTranscrevendoArquivo(false)
     }
-  }, [])
-
-  async function alternarConclusao(t: Tarefa) {
-    const concluir = t.status !== 'concluida'
-    await supabase
-      .from('tarefa')
-      .update({
-        status: concluir ? 'concluida' : 'pendente',
-        concluida_em: concluir ? new Date().toISOString() : null,
-      })
-      .eq('id', t.id)
-    await carregar()
-  }
-
-  async function descartar(t: Tarefa) {
-    await supabase.from('tarefa').update({ status: 'descartada' }).eq('id', t.id)
-    await carregar()
-  }
-
-  async function reagendarParaHoje(t: Tarefa) {
-    await supabase.from('tarefa').update({ data: hoje }).eq('id', t.id)
-    await carregar()
   }
 
   const listaTriagem = atrasadas.filter((t) => !mantidas.has(t.id))
-  const listaDia = ordenarTarefas(tarefas)
+  let listaDia = ordenarTarefas(tarefas)
+  if (filtros.delegadas) {
+    listaDia = listaDia.filter((t) => t.delegada_para)
+  }
+  if (filtros.rotinas) {
+    listaDia = listaDia.filter((t) => t.eh_rotina)
+  }
   const primeiroNome = perfil?.nome.split(' ')[0]
   const mostrarFechamento = Boolean(
     perfil && !diaFechado && tarefas.length > 0 && passouDoHorario(perfil.horario_relatorio)
@@ -232,9 +298,9 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                   <span className="triagem-data">{formatarDataCurta(t.data)}</span>
                 </div>
                 <div className="triagem-acoes">
-                  <button onClick={() => reagendarParaHoje(t)}>→ Hoje</button>
+                  <button onClick={() => reagendarParaHoje(t.id)}>→ Hoje</button>
                   <button onClick={() => setMantidas(new Set([...mantidas, t.id]))}>Manter</button>
-                  <button className="perigo" onClick={() => descartar(t)}>
+                  <button className="perigo" onClick={() => descartarAtrasada(t.id)}>
                     Descartar
                   </button>
                 </div>
@@ -245,13 +311,25 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
       )}
 
       <section className="lista-dia">
+        {(filtros.delegadas || filtros.rotinas) && (
+          <FiltrosHoje
+            filtrosAtivos={filtros}
+            onMudarFiltro={(tipo, ativo) => {
+              setFiltros((prev) => ({ ...prev, [tipo]: ativo }))
+            }}
+          />
+        )}
         {carregando ? (
-          <p className="texto-suave">Carregando…</p>
+          <ul>
+            <SkeletonTarefa />
+            <SkeletonTarefa />
+            <SkeletonTarefa />
+          </ul>
         ) : listaDia.length === 0 ? (
           <div className="vazio">
-            <p>Nenhuma tarefa para hoje.</p>
+            <p>{filtros.delegadas || filtros.rotinas ? 'Nenhuma tarefa com esses filtros.' : 'Nenhuma tarefa para hoje.'}</p>
             <p className="texto-suave">
-              Digite abaixo o que precisa ser feito e escolha a importância — só isso.
+              {!filtros.delegadas && !filtros.rotinas && 'Digite abaixo o que precisa ser feito e escolha a importância — só isso.'}
             </p>
           </div>
         ) : (
@@ -265,18 +343,32 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
                   <input
                     type="checkbox"
                     checked={t.status === 'concluida'}
-                    onChange={() => alternarConclusao(t)}
+                    onChange={() => marcarConcluida(t.id)}
                   />
                   <span className="titulo-tarefa">{t.titulo}</span>
                 </label>
                 <span className={`selo ${t.classificacao}`} title={ROTULO_CLASSIFICACAO[t.classificacao]}>
                   {ROTULO_CLASSIFICACAO[t.classificacao][0]}
                 </span>
+                {renderarIndicadores(t)}
+                {t.delegada_para && (
+                  <MenuStatusDelegacao
+                    tarefa={t}
+                    onMudarStatus={async (novoStatus) => {
+                      try {
+                        await mudarStatusDelegacao(t.id, novoStatus)
+                        await carregar()
+                      } catch (erro) {
+                        console.error('Erro ao mudar status:', erro)
+                      }
+                    }}
+                  />
+                )}
                 {t.status === 'pendente' && (
                   <button
                     className="botao-descartar"
                     title="Descartar"
-                    onClick={() => descartar(t)}
+                    onClick={() => descartar(t.id)}
                   >
                     ✕
                   </button>
@@ -309,6 +401,12 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
           <button className={modo === 'obs' ? 'chip ativo' : 'chip'} onClick={() => setModo('obs')}>
             ✎ Anotação
           </button>
+          <button
+            className={modo === 'voz' ? 'chip ativo' : 'chip'}
+            onClick={() => setModo('voz')}
+          >
+            🎤 Voz
+          </button>
           {modo === 'tarefa' && (
             <span className="captura-dia">
               <button
@@ -326,85 +424,195 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
             </span>
           )}
         </div>
-        <div className="captura-input-linha">
-          <input
-            className="captura-campo"
-            placeholder={modo === 'tarefa' ? 'O que precisa ser feito?' : 'Anote uma observação…'}
-            value={texto}
-            onChange={(e) => {
-              setTexto(e.target.value)
-              setOrigemAtual('texto')
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') salvar()
-            }}
-          />
-          <button
-            className={gravando ? 'botao-icone gravando' : 'botao-icone'}
-            title="Áudio"
-            aria-label="Capturar por áudio"
-            onClick={() => setPainelAudioAberto((v) => !v)}
-          >
-            🎤
-          </button>
-        </div>
+        {modo !== 'voz' && (
+          <>
+            <input
+              className="captura-campo"
+              placeholder={modo === 'tarefa' ? 'O que precisa ser feito?' : 'Anote uma observação…'}
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') salvar()
+              }}
+            />
+            <div className="captura-acoes">
+              {modo === 'tarefa' ? (
+                <>
+                  <button
+                    className="botao-secundario"
+                    disabled={!texto.trim() || salvando}
+                    onClick={() => setMostrarOpcoes(true)}
+                  >
+                    ⚙️ Opções
+                  </button>
+                  {CLASSIFICACOES.map((c) => (
+                    <button
+                      key={c}
+                      className={`botao-classificacao ${c}`}
+                      disabled={!texto.trim() || salvando}
+                      onClick={() => salvar(c)}
+                    >
+                      {ROTULO_CLASSIFICACAO[c]}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <button
+                  className="botao-primario"
+                  disabled={!texto.trim() || salvando}
+                  onClick={() => salvar()}
+                >
+                  Registrar
+                </button>
+              )}
+            </div>
+          </>
+        )}
+        {modo === 'voz' && (
+          <div className="captura-voz">
+            <div className="voz-status">
+              {vozEstado.escutando && (
+                <div className="voz-escutando">
+                  <div className="voz-animacao">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  <p>Escutando…</p>
+                </div>
+              )}
+              {vozEstado.processando && (
+                <div className="voz-processando">
+                  <p>Processando…</p>
+                </div>
+              )}
+              {vozEstado.erro && (
+                <div className="voz-erro">
+                  <p>⚠️ {vozEstado.erro}</p>
+                </div>
+              )}
+              {vozEstado.transcricao && !vozEstado.escutando && !vozEstado.processando && (
+                <div className="voz-resultado">
+                  <p>📝 {vozEstado.transcricao}</p>
+                </div>
+              )}
+            </div>
+            <div className="captura-acoes">
+              {!vozEstado.escutando && !vozEstado.processando && !vozEstado.transcricao && (
+                <button
+                  className="botao-primario"
+                  onClick={() => iniciarVoz()}
+                  disabled={!navigator.mediaDevices}
+                >
+                  🎤 Começar a falar
+                </button>
+              )}
+              {vozEstado.escutando && (
+                <button
+                  className="botao-secundario"
+                  onClick={() => {
+                    // Stop button would go here
+                  }}
+                >
+                  Parar
+                </button>
+              )}
+              {vozEstado.transcricao && !vozEstado.escutando && !vozEstado.processando && (
+                <>
+                  <button
+                    className="botao-secundario"
+                    onClick={() => limparVoz()}
+                    disabled={interpretando}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    className="botao-primario"
+                    onClick={() => interpretarEAbrirModal(vozEstado.transcricao)}
+                    disabled={interpretando}
+                  >
+                    {interpretando ? 'Interpretando…' : 'Confirmar'}
+                  </button>
+                </>
+              )}
+            </div>
 
-        {painelAudioAberto && (
-          <div className="painel-audio">
-            {transcrevendo ? (
-              <p className="texto-suave">Transcrevendo áudio…</p>
-            ) : gravando ? (
-              <button className="botao-secundario" onClick={pararGravacao}>
-                ⏹ Parar gravação
-              </button>
-            ) : (
-              <div className="painel-audio-acoes">
-                <button className="chip" onClick={iniciarGravacao}>
-                  🔴 Gravar agora
+            {!vozEstado.escutando && (
+              <div className="painel-audio">
+                <button
+                  className="chip"
+                  onClick={() => arquivoInputRef.current?.click()}
+                  disabled={transcrevendoArquivo}
+                >
+                  📎 Ou enviar um arquivo de áudio
                 </button>
-                <button className="chip" onClick={() => arquivoInputRef.current?.click()}>
-                  📎 Enviar arquivo
-                </button>
+                <input
+                  ref={arquivoInputRef}
+                  type="file"
+                  accept={ACCEPT_INPUT_ARQUIVO}
+                  className="input-oculto"
+                  onChange={aoSelecionarArquivo}
+                />
+                {transcrevendoArquivo && <p className="texto-suave">Transcrevendo áudio…</p>}
+                {erroArquivo && <p className="mensagem-erro">{erroArquivo}</p>}
+                <p className="texto-suave formatos-aceitos">
+                  Formatos aceitos: {FORMATOS_ACEITOS.join(', ')} — inclui notas de voz do
+                  WhatsApp (.opus/.ogg).
+                </p>
               </div>
             )}
-            <input
-              ref={arquivoInputRef}
-              type="file"
-              accept={ACCEPT_INPUT_ARQUIVO}
-              className="input-oculto"
-              onChange={aoSelecionarArquivo}
-            />
-            {erroAudio && <p className="mensagem-erro">{erroAudio}</p>}
-            <p className="texto-suave formatos-aceitos">
-              Formatos aceitos: {FORMATOS_ACEITOS.join(', ')} — inclui notas de voz do WhatsApp
-              (.opus/.ogg).
-            </p>
           </div>
         )}
-
-        <div className="captura-acoes">
-          {modo === 'tarefa' ? (
-            CLASSIFICACOES.map((c) => (
-              <button
-                key={c}
-                className={`botao-classificacao ${c}`}
-                disabled={!texto.trim() || salvando}
-                onClick={() => salvar(c)}
-              >
-                {ROTULO_CLASSIFICACAO[c]}
-              </button>
-            ))
-          ) : (
-            <button
-              className="botao-primario"
-              disabled={!texto.trim() || salvando}
-              onClick={() => salvar()}
-            >
-              Registrar
-            </button>
-          )}
-        </div>
       </div>
+
+      {mostrarModalVoz && (
+        <ModalConfirmarVoz
+          tarefa={tarefa}
+          classificacao={classificacaoInterpretada}
+          data={dataInterpretada}
+          confianca={confianca}
+          processando={salvando}
+          onConfirmar={async (t, c, d) => {
+            setSalvando(true)
+            try {
+              await supabase.from('tarefa').insert({
+                titulo: t,
+                data: d === 'hoje' ? hoje : adicionarDias(hoje, 1),
+                classificacao: c,
+                origem: 'voz',
+              })
+              await carregar()
+              limparVoz()
+              setMostrarModalVoz(false)
+              setModo('tarefa')
+            } finally {
+              setSalvando(false)
+            }
+          }}
+          onCancelar={() => {
+            setMostrarModalVoz(false)
+            limparVoz()
+          }}
+        />
+      )}
+
+      <ModalOpcoesTarefa
+        aberto={mostrarOpcoes}
+        titulo={texto}
+        classificacao={ultimaClassificacao.current}
+        data={diaAlvo}
+        onCancelar={() => setMostrarOpcoes(false)}
+        onConfirmar={(dados) => {
+          setOpcoesTarefa({
+            ehRotina: dados.ehRotina,
+            diasRotina: dados.diasRotina,
+            ehDelegada: dados.ehDelegada,
+            delegadaPara: dados.delegadaPara,
+            prazoDelegacao: dados.prazoDelegacao,
+          })
+          setMostrarOpcoes(false)
+        }}
+      />
     </div>
   )
 }

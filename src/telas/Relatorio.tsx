@@ -1,70 +1,40 @@
-import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { useEffect, useState } from 'react'
+import SkeletonCard from '../componentes/SkeletonCard'
 import { adicionarDias, formatarDataLonga, hojeISO } from '../lib/datas'
+import { useRelatorioData } from '../hooks/useRelatorioData'
 import {
   CLASSIFICACOES,
   ROTULO_CLASSIFICACAO,
   calcularResumo,
-  type Observacao,
-  type Tarefa,
 } from '../lib/dominio'
-
-interface Fechamento {
-  nota: number | null
-  observacao: string | null
-}
 
 export default function Relatorio() {
   const hoje = hojeISO()
   const [data, setData] = useState(hoje)
-  const [tarefas, setTarefas] = useState<Tarefa[]>([])
-  const [observacoes, setObservacoes] = useState<Observacao[]>([])
-  const [fechamento, setFechamento] = useState<Fechamento | null>(null)
-  const [nota, setNota] = useState(0)
-  const [obsFinal, setObsFinal] = useState('')
+  const { tarefas, observacoes, fechamento, carregando, salvarFechamento } = useRelatorioData(data)
+
+  const [nota, setNota] = useState(fechamento?.nota ?? 0)
+  const [obsFinal, setObsFinal] = useState(fechamento?.observacao ?? '')
   const [salvando, setSalvando] = useState(false)
   const [mensagem, setMensagem] = useState('')
 
-  const carregar = useCallback(async () => {
-    const [t, o, r] = await Promise.all([
-      supabase.from('tarefa').select('*').eq('data', data),
-      supabase.from('observacao').select('*').eq('data', data).order('criado_em'),
-      supabase.from('relatorio_dia').select('nota, observacao').eq('data', data).maybeSingle(),
-    ])
-    setTarefas((t.data as Tarefa[]) ?? [])
-    setObservacoes((o.data as Observacao[]) ?? [])
-    const fech = (r.data as Fechamento | null) ?? null
-    setFechamento(fech)
-    setNota(fech?.nota ?? 0)
-    setObsFinal(fech?.observacao ?? '')
-    setMensagem('')
-  }, [data])
-
   useEffect(() => {
-    carregar()
-  }, [carregar])
+    setNota(fechamento?.nota ?? 0)
+    setObsFinal(fechamento?.observacao ?? '')
+    setMensagem('')
+  }, [fechamento])
 
   const resumo = calcularResumo(tarefas)
 
   async function fecharDia() {
     setSalvando(true)
     try {
-      const { error } = await supabase.from('relatorio_dia').upsert(
-        {
-          data,
-          planejadas: resumo.planejadas,
-          concluidas: resumo.concluidas,
-          por_classificacao: resumo.porClassificacao,
-          nota: nota || null,
-          observacao: obsFinal.trim() || null,
-        },
-        { onConflict: 'usuario_id,data' }
-      )
-      if (error) throw error
-      setFechamento({ nota: nota || null, observacao: obsFinal.trim() || null })
-      setMensagem('Dia fechado. Bom descanso! 🌙')
-    } catch {
-      setMensagem('Não foi possível salvar. Tente de novo.')
+      const sucesso = await salvarFechamento(nota, obsFinal)
+      if (sucesso) {
+        setMensagem('Dia fechado. Bom descanso! 🌙')
+      } else {
+        setMensagem('Não foi possível salvar. Tente de novo.')
+      }
     } finally {
       setSalvando(false)
     }
@@ -89,36 +59,45 @@ export default function Relatorio() {
         </button>
       </header>
 
-      <section className="cartao destaque">
-        <p className="numero-grande">
-          {resumo.concluidas}
-          <span className="numero-sufixo">/{resumo.planejadas} concluídas</span>
-        </p>
-        <div className="barra">
-          <div className="barra-preenchida" style={{ width: `${resumo.percentual}%` }} />
-        </div>
-        <p className="texto-suave">{resumo.percentual}% do dia planejado</p>
-      </section>
-
-      <section className="cartao">
-        <h2>Por importância</h2>
-        {CLASSIFICACOES.map((c) => {
-          const r = resumo.porClassificacao[c]
-          const pct = r.planejadas === 0 ? 0 : Math.round((r.concluidas / r.planejadas) * 100)
-          return (
-            <div key={c} className="linha-classificacao">
-              <span className={`selo ${c}`}>{ROTULO_CLASSIFICACAO[c][0]}</span>
-              <span className="rotulo-classificacao">{ROTULO_CLASSIFICACAO[c]}</span>
-              <div className={`barra fina ${c}`}>
-                <div className="barra-preenchida" style={{ width: `${pct}%` }} />
-              </div>
-              <span className="contagem">
-                {r.concluidas}/{r.planejadas}
-              </span>
+      {carregando ? (
+        <>
+          <SkeletonCard />
+          <SkeletonCard />
+        </>
+      ) : (
+        <>
+          <section className="cartao destaque">
+            <p className="numero-grande">
+              {resumo.concluidas}
+              <span className="numero-sufixo">/{resumo.planejadas} concluídas</span>
+            </p>
+            <div className="barra">
+              <div className="barra-preenchida" style={{ width: `${resumo.percentual}%` }} />
             </div>
-          )
-        })}
-      </section>
+            <p className="texto-suave">{resumo.percentual}% do dia planejado</p>
+          </section>
+
+          <section className="cartao">
+            <h2>Por importância</h2>
+            {CLASSIFICACOES.map((c) => {
+              const r = resumo.porClassificacao[c]
+              const pct = r.planejadas === 0 ? 0 : Math.round((r.concluidas / r.planejadas) * 100)
+              return (
+                <div key={c} className="linha-classificacao">
+                  <span className={`selo ${c}`}>{ROTULO_CLASSIFICACAO[c][0]}</span>
+                  <span className="rotulo-classificacao">{ROTULO_CLASSIFICACAO[c]}</span>
+                  <div className={`barra fina ${c}`}>
+                    <div className="barra-preenchida" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="contagem">
+                    {r.concluidas}/{r.planejadas}
+                  </span>
+                </div>
+              )
+            })}
+          </section>
+        </>
+      )}
 
       {observacoes.length > 0 && (
         <section className="cartao">

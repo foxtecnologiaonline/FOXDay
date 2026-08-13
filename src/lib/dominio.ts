@@ -3,6 +3,7 @@
 export type Classificacao = 'importante' | 'urgente' | 'circunstancial'
 export type StatusTarefa = 'pendente' | 'concluida' | 'descartada'
 export type Origem = 'texto' | 'voz'
+export type StatusDelegacao = 'nao_delegada' | 'delegada' | 'cumprida' | 'nao_cumprida'
 
 export interface Tarefa {
   id: string
@@ -10,16 +11,24 @@ export interface Tarefa {
   data: string // AAAA-MM-DD
   classificacao: Classificacao
   status: StatusTarefa
-  origem: Origem
+  origem?: Origem
   criada_em: string
   concluida_em: string | null
+  // Delegação
+  delegada_para?: string | null
+  prazo_delegacao?: string | null // AAAA-MM-DD
+  status_delegacao?: StatusDelegacao
+  // Rotina
+  eh_rotina?: boolean
+  dias_rotina?: number[] // 0=seg, 1=ter, ..., 6=dom
+  rotina_id?: string | null
 }
 
 export interface Observacao {
   id: string
   texto: string
   data: string
-  origem: Origem
+  origem?: Origem
   criado_em: string
 }
 

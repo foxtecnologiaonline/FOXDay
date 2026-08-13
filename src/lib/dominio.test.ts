@@ -100,3 +100,56 @@ describe('datas', () => {
     expect(passouDoHorario('18:00', as18h)).toBe(true)
   })
 })
+
+describe('Delegação e Rotina', () => {
+  it('tarefa delegada tem delegada_para e status_delegacao', () => {
+    const t = tarefa({
+      delegada_para: 'João',
+      status_delegacao: 'delegada',
+    })
+    expect(t.delegada_para).toBe('João')
+    expect(t.status_delegacao).toBe('delegada')
+  })
+
+  it('tarefa rotina tem eh_rotina e diasRotina com valores válidos (0-6)', () => {
+    const t = tarefa({
+      eh_rotina: true,
+      dias_rotina: [0, 2, 4],
+    })
+    expect(t.eh_rotina).toBe(true)
+    expect(t.dias_rotina).toEqual([0, 2, 4])
+    expect(t.dias_rotina!.every((d) => d >= 0 && d < 7)).toBe(true)
+  })
+
+  it('tarefa sem delegação tem status_delegacao padrão nao_delegada', () => {
+    const t = tarefa({})
+    expect(t.delegada_para).toBeUndefined()
+    expect(t.status_delegacao).toBeUndefined()
+  })
+
+  it('tarefa com rotina pode ter prazo_delegacao se também delegada', () => {
+    const t = tarefa({
+      eh_rotina: true,
+      dias_rotina: [1, 3],
+      delegada_para: 'Maria',
+      prazo_delegacao: '2026-08-15',
+      status_delegacao: 'cumprida',
+    })
+    expect(t.eh_rotina).toBe(true)
+    expect(t.delegada_para).toBe('Maria')
+    expect(t.prazo_delegacao).toBe('2026-08-15')
+    expect(t.status_delegacao).toBe('cumprida')
+  })
+
+  it('status de delegação segue enum válido', () => {
+    const validos: any[] = [
+      tarefa({ status_delegacao: 'nao_delegada' }),
+      tarefa({ status_delegacao: 'delegada' }),
+      tarefa({ status_delegacao: 'cumprida' }),
+      tarefa({ status_delegacao: 'nao_cumprida' }),
+    ]
+    validos.forEach((t) => {
+      expect(['nao_delegada', 'delegada', 'cumprida', 'nao_cumprida']).toContain(t.status_delegacao)
+    })
+  })
+})

@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigurado } from './lib/supabase'
+import ErrorBoundary from './ComponenteErro'
 import Entrar from './telas/Entrar'
-import Hoje from './telas/Hoje'
-import Relatorio from './telas/Relatorio'
-import Historico from './telas/Historico'
-import Config from './telas/Config'
+
+// Lazy-load telas de navegação (carregadas sob demanda)
+const Hoje = lazy(() => import('./telas/Hoje'))
+const Relatorio = lazy(() => import('./telas/Relatorio'))
+const Historico = lazy(() => import('./telas/Historico'))
+const Calendario = lazy(() => import('./telas/Calendario'))
+const Config = lazy(() => import('./telas/Config'))
 
 export interface Perfil {
   id: string
@@ -14,12 +18,13 @@ export interface Perfil {
   horario_relatorio: string
 }
 
-type Aba = 'hoje' | 'relatorio' | 'historico' | 'config'
+type Aba = 'hoje' | 'relatorio' | 'historico' | 'calendario' | 'config'
 
 const ABAS: { id: Aba; rotulo: string; icone: string }[] = [
   { id: 'hoje', rotulo: 'Hoje', icone: '☀️' },
   { id: 'relatorio', rotulo: 'Relatório', icone: '📊' },
   { id: 'historico', rotulo: 'Histórico', icone: '🗓️' },
+  { id: 'calendario', rotulo: 'Calendário', icone: '📅' },
   { id: 'config', rotulo: 'Ajustes', icone: '⚙️' },
 ]
 
@@ -80,29 +85,34 @@ export default function App() {
   if (!sessao) return <Entrar />
 
   return (
-    <div className="app">
-      <main className="conteudo">
-        {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
-        {aba === 'relatorio' && <Relatorio />}
-        {aba === 'historico' && <Historico />}
-        {aba === 'config' && (
-          <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
-        )}
-      </main>
-      <nav className="barra-nav">
-        {ABAS.map((a) => (
-          <button
-            key={a.id}
-            className={aba === a.id ? 'nav-item ativo' : 'nav-item'}
-            onClick={() => setAba(a.id)}
-          >
-            <span className="nav-icone" aria-hidden>
-              {a.icone}
-            </span>
-            {a.rotulo}
-          </button>
-        ))}
-      </nav>
-    </div>
+    <ErrorBoundary>
+      <div className="app">
+        <main className="conteudo">
+          <Suspense fallback={<div className="tela-central"><p>Carregando…</p></div>}>
+            {aba === 'hoje' && <Hoje perfil={perfil} irParaRelatorio={() => setAba('relatorio')} />}
+            {aba === 'relatorio' && <Relatorio />}
+            {aba === 'historico' && <Historico />}
+            {aba === 'calendario' && <Calendario />}
+            {aba === 'config' && (
+              <Config perfil={perfil} email={sessao.user.email ?? ''} aoAtualizar={setPerfil} />
+            )}
+          </Suspense>
+        </main>
+        <nav className="barra-nav">
+          {ABAS.map((a) => (
+            <button
+              key={a.id}
+              className={aba === a.id ? 'nav-item ativo' : 'nav-item'}
+              onClick={() => setAba(a.id)}
+            >
+              <span className="nav-icone" aria-hidden>
+                {a.icone}
+              </span>
+              {a.rotulo}
+            </button>
+          ))}
+        </nav>
+      </div>
+    </ErrorBoundary>
   )
 }

@@ -35,24 +35,3 @@ export async function transcreverAudio(blob: Blob, nomeArquivo: string): Promise
   }
   return texto
 }
-
-// Extensão adequada para o Blob produzido pelo MediaRecorder do navegador.
-export function extensaoParaMimeType(mimeType: string): string {
-  if (mimeType.includes('ogg')) return 'ogg'
-  if (mimeType.includes('webm')) return 'webm'
-  if (mimeType.includes('mp4')) return 'mp4'
-  if (mimeType.includes('wav')) return 'wav'
-  return 'webm'
-}
-
-export const MIME_TYPES_GRAVACAO = [
-  'audio/webm;codecs=opus',
-  'audio/webm',
-  'audio/ogg;codecs=opus',
-  'audio/ogg',
-]
-
-export function mimeTypeSuportado(): string | undefined {
-  if (typeof MediaRecorder === 'undefined') return undefined
-  return MIME_TYPES_GRAVACAO.find((tipo) => MediaRecorder.isTypeSupported(tipo))
-}
