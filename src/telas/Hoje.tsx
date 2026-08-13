@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Perfil } from '../App'
-import { supabase } from '../lib/supabase'
+import { supabase, supabaseCall } from '../lib/supabase'
+import { logErro } from '../lib/log'
 import SkeletonTarefa from '../componentes/SkeletonTarefa'
 import ModalConfirmarVoz from '../componentes/ModalConfirmarVoz'
 import ModalOpcoesTarefa from '../componentes/ModalOpcoesTarefa'
 import MenuStatusDelegacao from '../componentes/MenuStatusDelegacao'
 import FiltrosHoje from '../componentes/FiltrosHoje'
+import UploadAudio from '../componentes/UploadAudio'
+import ModalConfirmarAudio from '../componentes/ModalConfirmarAudio'
 import type { StatusDelegacao } from '../lib/dominio'
+import type { InterpretacaoVoz } from '../lib/claude'
 import { useTarefasHoje } from '../hooks/useTarefasHoje'
 import { useAtrasadas } from '../hooks/useAtrasadas'
 import { useVozCaptura } from '../hooks/useVozCaptura'
@@ -108,7 +112,7 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
   const [diaFechado, setDiaFechado] = useState(true)
 
   const [texto, setTexto] = useState('')
-  const [modo, setModo] = useState<'tarefa' | 'obs' | 'voz'>('tarefa')
+  const [modo, setModo] = useState<'tarefa' | 'obs' | 'voz' | 'audio'>('tarefa')
   const [diaAlvo, setDiaAlvo] = useState<'hoje' | 'amanha'>('hoje')
   const [salvando, setSalvando] = useState(false)
   const ultimaClassificacao = useRef<Classificacao>('importante')
@@ -129,6 +133,11 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
     prazoDelegacao: null as string | null,
   })
   const [filtros, setFiltros] = useState({ delegadas: false, rotinas: false })
+
+  // Audio transcription state
+  const [mostrarModalAudio, setMostrarModalAudio] = useState(false)
+  const [transcricaoAudio, setTranscricaoAudio] = useState('')
+  const [duracaoAudio, setDuracaoAudio] = useState(0)
 
   const carregando = carregandoTarefas || carregandoAtrasadas
 
@@ -203,6 +212,52 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
         delegadaPara: null,
         prazoDelegacao: null,
       })
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const confirmarAudio = async (interpretacao: InterpretacaoVoz) => {
+    try {
+      setSalvando(true)
+      const dataInserção = interpretacao.data === 'hoje' ? hoje : adicionarDias(hoje, 1)
+
+      // Inserir tarefa com origem='audio-file'
+      const { data: tarefaData, error } = await supabase
+        .from('tarefa')
+        .insert({
+          titulo: interpretacao.texto,
+          data: dataInserção,
+          classificacao: interpretacao.classificacao,
+          origem: 'audio-file',
+        })
+        .select()
+
+      if (error) throw error
+
+      // Registrar metadado de transcrição
+      if (tarefaData && tarefaData.length > 0) {
+        await supabaseCall(async () => {
+          return supabase.from('audio_transcript').insert({
+            transcricao: transcricaoAudio,
+            duracao_segundos: duracaoAudio,
+            confianca: interpretacao.confianca,
+            origem: 'audio-file',
+            tarefa_id: tarefaData[0].id,
+          })
+        })
+      }
+
+      // Cleanup
+      setMostrarModalAudio(false)
+      setTranscricaoAudio('')
+      setDuracaoAudio(0)
+      setModo('tarefa')
+
+      // Reload tarefas
+      await carregar()
+    } catch (err) {
+      logErro('confirmarAudio: erro ao criar tarefa', err as Error)
     } finally {
       setSalvando(false)
     }
@@ -357,6 +412,12 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
           >
             🎤 Voz
           </button>
+          <button
+            className={modo === 'audio' ? 'chip ativo' : 'chip'}
+            onClick={() => setModo('audio')}
+          >
+            📤 Áudio
+          </button>
           {modo === 'tarefa' && (
             <span className="captura-dia">
               <button
@@ -502,7 +563,39 @@ export default function Hoje({ perfil, irParaRelatorio }: Props) {
             </div>
           </div>
         )}
+        {modo === 'audio' && (
+          <div className="captura-audio">
+            {!mostrarModalAudio ? (
+              <UploadAudio
+                onTranscricaoSucesso={(texto, duracao) => {
+                  setTranscricaoAudio(texto)
+                  setDuracaoAudio(duracao)
+                  setMostrarModalAudio(true)
+                }}
+                onErro={(erro) => {
+                  logErro('UploadAudio: erro', Error(erro))
+                }}
+              />
+            ) : (
+              <p className="info-audio">Carregando interpretação…</p>
+            )}
+          </div>
+        )}
       </div>
+
+      {mostrarModalAudio && transcricaoAudio && (
+        <ModalConfirmarAudio
+          transcricao={transcricaoAudio}
+          duracao={duracaoAudio}
+          onConfirmar={confirmarAudio}
+          onCancelar={() => {
+            setMostrarModalAudio(false)
+            setTranscricaoAudio('')
+            setDuracaoAudio(0)
+          }}
+          onEditarTranscricao={setTranscricaoAudio}
+        />
+      )}
 
       {mostrarModalVoz && (
         <ModalConfirmarVoz
