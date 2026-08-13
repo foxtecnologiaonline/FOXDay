@@ -31,6 +31,21 @@ No dashboard do projeto Supabase, em **Authentication**:
 - **Sign In / Providers → Email → "Confirm email"**: desativar. Como a Fase 1 é uso pessoal (decisão 5 do escopo), a confirmação por e-mail é fricção desnecessária — login deve funcionar direto após o cadastro.
 - **URL Configuration → Site URL**: definir para a URL de produção do app (ex.: a URL da Vercel), não `localhost`. Isso garante que qualquer link de e-mail (recuperação de senha, etc.) aponte para o lugar certo caso a confirmação seja reativada no futuro (fase multiusuário).
 
+### Captura por áudio (transcrição)
+
+Tarefas e anotações também podem ser criadas por voz: grave direto no app ou envie um arquivo de áudio — inclusive notas de voz do WhatsApp (`.opus`/`.ogg`). A transcrição roda em uma Supabase Edge Function (`supabase/functions/transcrever-audio`), que chama a API de transcrição da OpenAI (`whisper-1`) no servidor, mantendo a chave fora do app.
+
+Formatos aceitos (mesmos suportados pela API): `mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, oga, opus, flac`. Limite de 25MB por arquivo (limite da própria API).
+
+**Deploy da função** (Supabase CLI):
+
+```bash
+supabase functions deploy transcrever-audio --project-ref SEU_PROJECT_REF
+supabase secrets set OPENAI_API_KEY=sk-... --project-ref SEU_PROJECT_REF
+```
+
+A chave `OPENAI_API_KEY` é obtida em [platform.openai.com](https://platform.openai.com/api-keys) — é um custo de uso (~US$ 0,006/min de áudio transcrito), pago por fora, sem crédito gratuito dedicado.
+
 ## Stack (aprovada)
 
 - **Frontend:** PWA mobile-first (React + Vite)

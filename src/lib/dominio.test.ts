@@ -14,6 +14,7 @@ function tarefa(parcial: Partial<Tarefa>): Tarefa {
     data: '2026-08-08',
     classificacao: 'circunstancial',
     status: 'pendente',
+    origem: 'texto',
     criada_em: '2026-08-08T08:00:00Z',
     concluida_em: null,
     ...parcial,

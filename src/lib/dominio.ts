@@ -2,6 +2,7 @@
 
 export type Classificacao = 'importante' | 'urgente' | 'circunstancial'
 export type StatusTarefa = 'pendente' | 'concluida' | 'descartada'
+export type Origem = 'texto' | 'voz'
 
 export interface Tarefa {
   id: string
@@ -9,6 +10,7 @@ export interface Tarefa {
   data: string // AAAA-MM-DD
   classificacao: Classificacao
   status: StatusTarefa
+  origem: Origem
   criada_em: string
   concluida_em: string | null
 }
@@ -17,6 +19,7 @@ export interface Observacao {
   id: string
   texto: string
   data: string
+  origem: Origem
   criado_em: string
 }
 

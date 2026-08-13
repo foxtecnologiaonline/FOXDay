@@ -300,13 +300,71 @@ ul {
   font-weight: 600;
 }
 
+.captura-input-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .captura-campo {
+  flex: 1;
   width: 100%;
   border: 1px solid var(--borda);
   border-radius: 12px;
   padding: 12px 14px;
   font-size: 1rem;
   background: var(--fundo);
+}
+
+.botao-icone {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo);
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.botao-icone.gravando {
+  background: var(--laranja-suave);
+  border-color: var(--urgente);
+  animation: pulsar 1.2s ease-in-out infinite;
+}
+
+@keyframes pulsar {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(201, 42, 42, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(201, 42, 42, 0);
+  }
+}
+
+.painel-audio {
+  border: 1px dashed var(--borda);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.painel-audio-acoes {
+  display: flex;
+  gap: 8px;
+}
+
+.input-oculto {
+  display: none;
+}
+
+.formatos-aceitos {
+  margin: 0;
 }
 
 .captura-campo:focus {

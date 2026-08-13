@@ -50,8 +50,9 @@ O produto materializa um método, não só uma lista de tarefas:
 ## 6. Funcionalidades por módulo
 
 ### M1 — Captura rápida
-- Campo único "o que precisa ser feito?" com criação por **texto** ou **voz** (transcrição).
-- Interpretação por linguagem natural: "ligar pro contador amanhã 9h **importante**" → tarefa com data, hora e classificação.
+- Campo único "o que precisa ser feito?" com criação por **texto** ou **voz**.
+- **Voz — implementado na Fase 1 (adiantado da Fase 2):** gravação ao vivo no app ou envio de arquivo de áudio em qualquer formato suportado pela API de transcrição (`mp3, mp4, mpeg, mpga, m4a, wav, webm, ogg, oga, opus, flac`), incluindo notas de voz do WhatsApp (`.opus`/`.ogg`). Transcrição via OpenAI `whisper-1` (Supabase Edge Function `transcrever-audio`); o texto transcrito fica editável antes de salvar — a transcrição sugere, o usuário confirma.
+- Interpretação por linguagem natural (texto → data/hora/classificação automática): planejado para Fase 2.
 - Criação em lote (colar várias linhas → várias tarefas).
 
 ### M2 — Classificação e planejamento
